@@ -135,10 +135,8 @@ function changePassword(actorUsername, oldPwd, newPwd, confirmNewPwd, targetUser
 function ensureDefaults() {
   const users = loadUsers();
   let dirty = false;
-  if (!users.admin) { users.admin = { password: 'Run629449768', role: 'admin', locked: false, created_at: Date.now() }; dirty = true; }
-  if (!users.User) { users.User = { password: 'Run629449768', role: 'admin', locked: false, created_at: Date.now() }; dirty = true; }
-  if (!users.trainer) { users.trainer = { password: 'trainer123', role: 'trainer', locked: false, created_at: Date.now() }; dirty = true; }
-  // 确保老账号有 locked 字段
+  if (!users.admin) { users.admin = { password: '12345678', role: 'admin', locked: false, created_at: Date.now() }; dirty = true; }
+  // 确保所有账号都有 locked 字段（兼容旧数据）
   for (const k of Object.keys(users)) { if (users[k].locked === undefined) { users[k].locked = false; dirty = true; } }
   if (dirty) saveUsers(users);
 }
