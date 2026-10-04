@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',sans-serif;padding:16px;font-size:13px}
+  h2{color:#8be9fd;margin-bottom:12px;font-size:15px}
+  .row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  input,select,textarea{background:#141a2a;border:1px solid #2a3a5a;color:#c8d6e5;padding:6px 10px;border-radius:4px;font-size:13px;width:100%;font-family:inherit}
+  input:focus,textarea:focus{outline:none;border-color:#8be9fd}
+  textarea{resize:vertical;min-height:80px}
+  button{background:#1a6dd4;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit}
+  button:hover{background:#2580f0}
+  button.secondary{background:#2a3a5a}
+  button.secondary:hover{background:#3a4a6a}
+  .panel{background:#0d1520;border:1px solid #1e2d4a;border-radius:6px;padding:12px;margin-bottom:12px}
+  .panel h3{color:#50fa7b;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;color:#8be9fd;padding:4px 8px;border-bottom:1px solid #1e2d4a;font-size:11px}
+  td{padding:4px 8px;border-bottom:1px solid #0d1520;vertical-align:top}
+  tr:hover td{background:#0d1a2a}
+  .tag{display:inline-block;background:#1a2a4a;padding:1px 6px;border-radius:8px;font-size:10px;color:#8be9fd;margin-right:3px}
+  .result{background:#0d1520;border:1px solid #1e2d4a;border-radius:4px;padding:10px;margin-top:8px;max-height:400px;overflow-y:auto;font-size:12px}
+  .hint{color:#5a6a8a;font-size:11px;margin-top:4px}
+  .stat-row{display:flex;gap:16px;margin-bottom:8px}
+  .stat-item{flex:1;background:#0d1520;border:1px solid #1e2d4a;border-radius:4px;padding:8px 12px}
+  .stat-item .val{color:#8be9fd;font-size:20px;font-weight:bold}
+  .stat-item .lbl{color:#5a6a8a;font-size:10px;margin-top:2px}
+  .empty{color:#5a6a8a;font-style:italic}
+  #import-area{display:none}
+</style>
+</head>
+<body>
+<h2>📚 语料库浏览器</h2>
+
+<div class="panel">
+  <h3>状态</h3>
+  <div class="stat-row" id="status-stats"></div>
+  <div class="row" style="margin-top:8px">
+    <button onclick="toggleImport()">📥 导入 JSON 语料</button>
+    <button class="secondary" onclick="refreshStatus()">刷新状态</button>
+  </div>
+  <div id="import-area">
+    <div class="hint" style="margin-top:8px">粘贴 JSON 数组，格式：[{"input":"...","output":"..."}]</div>
+    <textarea id="import-data" placeholder='[{"input":"你好","output":"你好！"},{"input":"再见","output":"再见！"}]' style="margin-top:4px"></textarea>
+    <div class="row" style="margin-top:6px">
+      <button onclick="doImport()" style="background:#1a6dd4">执行导入</button>
+      <button class="secondary" onclick="toggleImport()">取消</button>
+    </div>
+    <div id="import-result" class="hint" style="margin-top:4px"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>搜索</h3>
+  <div class="row">
+    <input id="q" placeholder="搜索 input 或 output..." onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">搜索</button>
+    <button class="secondary" onclick="clearSearch()">清空</button>
+  </div>
+  <div class="hint">搜索 corpus 表中所有训练语料</div>
+</div>
+
+<div class="panel">
+  <h3>搜索结果</h3>
+  <div id="result" class="result" style="display:none"></div>
+  <div id="result-empty" class="empty" style="display:none">暂无结果</div>
+</div>
+
+<script>
+const RESULT=document.getElementById('result'),EMPTY=document.getElementById('result-empty');
+async function api(p,b){const r=await fetch(p,{method:b?.method||'GET',headers:{'Content-Type':'application/json'},credentials:'include',body:b?.bd?JSON.stringify(b.bd):undefined});return r.json()}
+
+async function refreshStatus(){
+  try{
+    const s=await api('/api/dataset/status');
+    document.getElementById('status-stats').innerHTML=[
+      {v:s.importedInDB||0,l:'数据库语料组'},
+      {v:s.builtinExists?(s.builtinSize||0):0,l:'内置语料文件'},
+      {v:s.builtinExists?'✅':'❌',l:'内置文件存在'}
+    ].map(x=>'<div class="stat-item"><div class="val">'+x.v+'</div><div class="lbl">'+x.l+'</div></div>').join('');
+  }catch(e){}
+}
+
+let currentPage=1;
+async function doSearch(){
+  const q=document.getElementById('q').value.trim();
+  if(!q){RESULT.style.display='none';EMPTY.style.display='block';return}
+  EMPTY.style.display='none';RESULT.style.display='block';RESULT.textContent='搜索中...';
+  try{
+    const r=await api('/api/search/corpus?q='+encodeURIComponent(q)+'&limit=100');
+    const items=r.results||[];
+    if(!items.length){RESULT.style.display='none';EMPTY.style.display='block';return}
+    EMPTY.style.display='none';RESULT.style.display='block';
+    RESULT.innerHTML='<table><thead><tr><th>#</th><th>Input</th><th>Output</th><th>来源</th></tr></thead><tbody>'+
+      items.map((it,i)=>'<tr><td>'+(i+1)+'</td><td style="max-width:250px;word-break:break-all">'+esc(it.input)+'</td><td style="max-width:250px;word-break:break-all;color:#50fa7b">'+esc(it.output)+'</td><td><span class="tag">'+esc(it.source||'')+'</span></td></tr>'
+      ).join('')+'</tbody></table>';
+  }catch(e){RESULT.textContent='搜索失败: '+e.message}
+}
+
+function clearSearch(){document.getElementById('q').value='';RESULT.style.display='none';EMPTY.style.display='none'}
+
+async function doImport(){
+  const txt=document.getElementById('import-data').value.trim();
+  if(!txt)return document.getElementById('import-result').textContent='请输入 JSON 数据';
+  try{
+    const data=JSON.parse(txt);
+    const r=await api('/api/dataset/import',{method:'POST',bd:data});
+    document.getElementById('import-result').textContent='导入成功: '+r.imported+' 组';
+    document.getElementById('import-data').value='';
+    toggleImport();refreshStatus();
+  }catch(e){document.getElementById('import-result').textContent='导入失败: '+e.message}
+}
+
+function toggleImport(){
+  const area=document.getElementById('import-area');
+  area.style.display=area.style.display==='none'?'block':'none';
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+refreshStatus();
+</script>
+</body>
+</html>

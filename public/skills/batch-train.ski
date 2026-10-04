@@ -1,0 +1,12 @@
+{
+  "name": "batch-train",
+  "version": "1.0.0",
+  "description": "批量训练助手 — 从文本文件导入训练对，支持预览和确认",
+  "author": "chat-simulate",
+  "tags": ["train", "batch", "import"],
+  "commands": ["batch-train"],
+  "capabilities": ["batch-training"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/batch-train.html"
+}

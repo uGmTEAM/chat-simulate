@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>快照管理 - Chat Simulate</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    
+    <div class="main-content">
+      <div class="header">
+        <h1>📸 快照管理</h1>
+      </div>
+      <div class="page-container">
+        <div class="card">
+          <div class="card-title">快照列表</div>
+          <div style="margin-bottom:16px;display:flex;gap:8px;">
+            <input id="snap-label" class="input" placeholder="快照描述（可选）" style="max-width:300px;">
+            <button class="btn btn-primary" onclick="createSnapshot()">📸 创建新快照</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>描述</th><th>任务 ID</th><th>时间</th><th>文件路径</th><th>操作</th></tr>
+            </thead>
+            <tbody id="snap-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+
+    async function loadSnapshots() {
+      try {
+        const snaps = await API.listSnapshots();
+        const body = document.getElementById('snap-body');
+        body.innerHTML = '';
+        for (const s of snaps) {
+          body.insertAdjacentHTML('beforeend', `
+            <tr>
+              <td>#${s.id}</td>
+              <td>${s.label || '-'}</td>
+              <td>${s.task_id || '-'}</td>
+              <td>${formatTime(s.created_at)}</td>
+              <td class="font-mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.file_path}">${s.file_path.split(/[\\/]/).pop()}</td>
+              <td>
+                <button class="btn btn-sm btn-primary" onclick="restoreSnap(${s.id})">🔄 恢复</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSnap(${s.id})">🗑️</button>
+              </td>
+            </tr>
+          `);
+        }
+        if (!snaps.length) {
+          body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">暂无快照</td></tr>';
+        }
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function createSnapshot() {
+      const label = document.getElementById('snap-label').value.trim() || '手动快照';
+      try {
+        await API.createSnapshot(label);
+        toast('📸 快照已创建', 'success');
+        document.getElementById('snap-label').value = '';
+        loadSnapshots();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function restoreSnap(id) {
+      if (!confirm('⚠️ 恢复快照会覆盖当前数据库，确定？')) return;
+      try {
+        await API.restoreSnapshot(id);
+        toast('✅ 已恢复快照', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteSnap(id) {
+      if (!confirm('删除此快照？')) return;
+      try {
+        await API.deleteSnapshot(id);
+        toast('已删除', 'success');
+        loadSnapshots();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    loadSnapshots();
+  </script>
+</body>
+</html>

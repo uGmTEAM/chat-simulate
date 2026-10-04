@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',sans-serif;padding:16px;font-size:13px}
+  h2{color:#8be9fd;margin-bottom:12px;font-size:15px}
+  .row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  input,select,textarea{background:#141a2a;border:1px solid #2a3a5a;color:#c8d6e5;padding:6px 10px;border-radius:4px;font-size:13px;width:100%;font-family:inherit}
+  input:focus,textarea:focus{outline:none;border-color:#8be9fd}
+  textarea{resize:vertical;min-height:120px}
+  button{background:#1a6dd4;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit}
+  button:hover{background:#2580f0}
+  button.secondary{background:#2a3a5a}
+  button.secondary:hover{background:#3a4a6a}
+  .result{background:#0d1520;border:1px solid #1e2d4a;border-radius:4px;padding:10px;margin-top:10px;max-height:200px;overflow-y:auto;font-size:12px}
+  .tag{display:inline-block;background:#1a2a4a;padding:2px 8px;border-radius:10px;font-size:11px;color:#8be9fd;margin-right:4px}
+  .hint{color:#5a6a8a;font-size:11px;margin-top:4px}
+  .progress{height:3px;background:#1a2a4a;border-radius:2px;margin-top:8px;overflow:hidden}
+  .progress-bar{height:100%;background:#8be9fd;width:0%;transition:width 0.3s}
+</style>
+</head>
+<body>
+<h2>📦 批量训练</h2>
+<div class="row">
+  <select id="model"><option value="">选择模型...</option></select>
+</div>
+<div class="hint">每行格式：<code>输入 → 输出</code> 或 <code>输入 | 输出</code></div>
+<textarea id="data" placeholder="你好 → 你好！有什么可以帮你的？&#10;你是谁 → 我是 Chat Simulate 的 AI 助手"></textarea>
+<div class="row" style="margin-top:8px">
+  <button onclick="parseData()">解析预览</button>
+  <button class="secondary" onclick="runTrain()">执行训练</button>
+</div>
+<div id="prog" class="progress" style="display:none"><div id="bar" class="progress-bar"></div></div>
+<div id="out" class="result" style="display:none"></div>
+
+<script>
+const OUT=document.getElementById('out'),PROG=document.getElementById('prog'),BAR=document.getElementById('bar');
+let pairs=[];
+async function loadModels(){
+  try{
+    const r=await fetch('/api/models',{credentials:'include'});
+    const j=await r.json();
+    const sel=document.getElementById('model');
+    for(const m of(j.models||[])){const o=document.createElement('option');o.value=m.id;o.textContent=m.name+' ['+(m.weight_count||0)+']';sel.appendChild(o)}
+  }catch(e){}
+}
+loadModels();
+function parseData(){
+  const txt=document.getElementById('data').value.trim();
+  pairs=[];
+  for(const line of txt.split('\n')){
+    const m=line.match(/^(.+?)[→|](.+)$/);
+    if(m)pairs.push({input:m[1].trim(),output:m[2].trim()});
+  }
+  OUT.style.display='block';
+  OUT.textContent='解析到 '+pairs.length+' 组训练对\n'+pairs.slice(0,20).map(p=>p.input+' → '+p.output).join('\n')+(pairs.length>20?'\n...（仅显示前20条）':'');
+}
+async function runTrain(){
+  const mid=document.getElementById('model').value;
+  if(!mid)return alert('请先选择模型');
+  if(!pairs.length){parseData();if(!pairs.length)return}
+  PROG.style.display='block';BAR.style.width='0%';
+  let ok=0,err=0;
+  for(let i=0;i<pairs.length;i++){
+    BAR.style.width=Math.round((i+1)/pairs.length*100)+'%';
+    try{
+      await fetch('/api/models/'+mid+'/train-batch',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({pairs:[pairs[i]]})});
+      ok++;
+    }catch(e){err++}
+  }
+  OUT.style.display='block';
+  OUT.textContent='训练完成：成功 '+ok+' 条，失败 '+err+' 条';
+}
+</script>
+</body>
+</html>

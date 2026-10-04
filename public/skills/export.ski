@@ -1,0 +1,12 @@
+{
+  "name": "export",
+  "version": "1.0.0",
+  "description": "会话导出 — 选择会话导出为 JSON 文件",
+  "author": "chat-simulate",
+  "tags": ["export", "session", "json"],
+  "commands": ["export"],
+  "capabilities": ["session-export"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/export.html"
+}

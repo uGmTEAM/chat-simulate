@@ -1,0 +1,12 @@
+{
+  "name": "web-search",
+  "version": "1.0.0",
+  "description": "联网搜索 — 通过搜索引擎查询信息并返回结果摘要",
+  "author": "chat-simulate",
+  "tags": ["search", "web", "network"],
+  "commands": ["search", "web"],
+  "capabilities": ["web-search"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/web-search.html"
+}

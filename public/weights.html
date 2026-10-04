@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>权重可视化 - Chat Simulate</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    
+    <div class="main-content">
+      <div class="header">
+        <h1>🔤 Token 权重可视化</h1>
+        <div style="margin-left:auto;display:flex;gap:12px;">
+          <select id="layer-filter" class="select" style="width:auto;padding:8px 12px;">
+            <option value="">全部层级</option>
+            <option value="char">字符级</option>
+            <option value="word">词级</option>
+            <option value="sentence">句级</option>
+          </select>
+          <input id="search-input" class="input" placeholder="搜索 token / context..." style="width:200px;">
+          <button class="btn btn-primary" onclick="loadWeights()">🔍 搜索</button>
+        </div>
+      </div>
+      <div class="page-container">
+        <div class="stats-grid" id="stats-area"></div>
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title flex-between">
+            <span>Token 权重列表</span>
+            <span id="total-count" class="text-muted"></span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>层级</th>
+                  <th>Context (上文)</th>
+                  <th>Token</th>
+                  <th>Count</th>
+                  <th>Weight</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="weights-body"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;text-align:center;" id="pagination"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+
+    let offset = 0;
+    const LIMIT = 50;
+
+    async function loadStats() {
+      try {
+        const stats = await API.weightsStats();
+        const area = document.getElementById('stats-area');
+        area.innerHTML = '';
+        for (const layer of stats.byLayer) {
+          area.insertAdjacentHTML('beforeend', `
+            <div class="stat-card">
+              <div class="stat-value">${layer.count.toLocaleString()}</div>
+              <div class="stat-label">${layer.layer} 层权重</div>
+              <div class="text-muted" style="font-size:11px;">总出现 ${(layer.total_occurrences || 0).toLocaleString()} 次</div>
+            </div>
+          `);
+        }
+        area.insertAdjacentHTML('beforeend', `
+          <div class="stat-card">
+            <div class="stat-value">${(stats.avgWeight || 1).toFixed(2)}</div>
+            <div class="stat-label">平均 Weight</div>
+          </div>
+        `);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function loadWeights() {
+      try {
+        const layer = document.getElementById('layer-filter').value;
+        const keyword = document.getElementById('search-input').value;
+        const params = { limit: LIMIT, offset };
+        if (layer) params.layer = layer;
+        if (keyword) params.keyword = keyword;
+
+        const data = await API.weights(params);
+        const body = document.getElementById('weights-body');
+        body.innerHTML = '';
+
+        for (const w of data.items) {
+          const layerTag = {
+            char: '<span class="tag info">字符</span>',
+            word: '<span class="tag success">词</span>',
+            sentence: '<span class="tag warning">句子</span>',
+          }[w.layer] || w.layer;
+
+          const weightColor = w.weight > 1.5 ? 'var(--success)' : (w.weight < 0.7 ? 'var(--danger)' : 'var(--text-primary)');
+
+          body.insertAdjacentHTML('beforeend', `
+            <tr>
+              <td>${w.id}</td>
+              <td>${layerTag}</td>
+              <td class="font-mono" style="color:var(--text-secondary);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(w.context)}">${escapeHtml(w.context || '-')}</td>
+              <td style="font-weight:600;">${escapeHtml(w.token)}</td>
+              <td>${w.count}</td>
+              <td style="color:${weightColor};font-weight:600;">${w.weight.toFixed(2)}</td>
+              <td>
+                <button class="btn btn-sm" onclick="adjustWeight(${w.id}, 0.1)">+</button>
+                <button class="btn btn-sm" onclick="adjustWeight(${w.id}, -0.1)">-</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteToken(${w.id})">🗑️</button>
+              </td>
+            </tr>
+          `);
+        }
+
+        document.getElementById('total-count').textContent = `共 ${data.total} 条`;
+
+        // 分页
+        const p = document.getElementById('pagination');
+        p.innerHTML = `
+          <button class="btn btn-sm" ${offset === 0 ? 'disabled' : ''} onclick="offset-=${LIMIT};loadWeights();">← 上一页</button>
+          <span class="text-muted" style="margin:0 12px;">${Math.floor(offset/LIMIT) + 1} / ${Math.ceil(data.total / LIMIT) || 1}</span>
+          <button class="btn btn-sm" ${offset + LIMIT >= data.total ? 'disabled' : ''} onclick="offset+=${LIMIT};loadWeights();">下一页 →</button>
+        `;
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function adjustWeight(id, delta) {
+      try {
+        await API.adjustWeight({ id, delta });
+        toast('权重已调整', 'success');
+        loadWeights();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteToken(id) {
+      if (!confirm('确认删除此 token 权重？')) return;
+      try {
+        await API.deleteToken(id);
+        toast('已删除', 'success');
+        loadWeights();
+        loadStats();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    document.getElementById('search-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { offset = 0; loadWeights(); }
+    });
+    document.getElementById('layer-filter').addEventListener('change', () => { offset = 0; loadWeights(); });
+
+    loadStats();
+    loadWeights();
+    setInterval(loadStats, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>配置 - Chat Simulate</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    
+    <div class="main-content">
+      <div class="header">
+        <h1>⚙️ 配置</h1>
+      </div>
+      <div class="page-container">
+        <!-- AI 供应商配置 -->
+        <div class="card">
+          <div class="card-title">🤖 AI 供应商 API Keys</div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:16px;">
+            环境变量会覆盖此处填写的值。 Agnes AI 免费：https://platform.agnes-ai.com
+          </p>
+          <div class="flex gap-8" style="margin-bottom:12px;">
+            <label style="width:120px;" class="text-muted" style="font-size:12px;">默认供应商</label>
+            <select id="default-ai" class="select" style="max-width:300px;">
+              <option value="agnes">Agnes AI (免费)</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai">OpenAI</option>
+              <option value="doubao">豆包 Doubao</option>
+              <option value="qwen">通义千问</option>
+            </select>
+          </div>
+          <div id="ai-keys"></div>
+          <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="saveKeys()">💾 保存 API Keys</button>
+          </div>
+        </div>
+
+        <!-- 保存策略 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">💾 保存策略</div>
+          <div class="flex gap-16">
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">模式</label>
+              <select id="save-mode" class="select">
+                <option value="manual">手动保存 - 点击保存按钮才写入（推荐）</option>
+                <option value="interval">定时批量 - 每隔 N 秒自动写入</option>
+                <option value="realtime">实时写入 - 每次变更立即保存（最慢最安全）</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">间隔秒数 (interval 模式)</label>
+              <input id="save-interval" class="input" type="number" value="30" min="1">
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="saveConfig()">💾 应用保存策略</button>
+          </div>
+        </div>
+
+        <!-- 错误处理策略 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">🔧 无法生成回复时的策略</div>
+          <select id="fallback-mode" class="select" style="max-width:500px;">
+            <option value="fallback">兜底回复 - 返回预设话术（推荐，鲁棒性好）</option>
+            <option value="error">错误提示 - 明确告诉用户无法生成</option>
+            <option value="external_ai">调用外部 AI - 自动调云 API 生成</option>
+            <option value="empty">返回空 - 提示用户自己输入来训练</option>
+          </select>
+          <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="saveConfig()">💾 应用错误策略</button>
+          </div>
+        </div>
+
+        <!-- 代理 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">🌐 HTTP/HTTPS 代理</div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:12px;">访问国外 AI API 和数据集需要</p>
+          <div class="flex gap-8">
+            <label style="width:120px;" class="text-muted">HTTP Proxy</label>
+            <input id="http-proxy" class="input" placeholder="http://127.0.0.1:7890" style="flex:1;">
+          </div>
+          <div class="flex gap-8" style="margin-top:8px;">
+            <label style="width:120px;" class="text-muted">HTTPS Proxy</label>
+            <input id="https-proxy" class="input" placeholder="http://127.0.0.1:7890" style="flex:1;">
+          </div>
+          <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="saveConfig()">💾 应用代理设置</button>
+          </div>
+        </div>
+
+        <!-- 模拟参数 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">🧠 模拟算法参数</div>
+          <div class="flex gap-16">
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">温度 (0-2，越高越随机)</label>
+              <input id="temperature" class="input" type="number" value="0.7" min="0" max="2" step="0.1">
+            </div>
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">N-gram 大小</label>
+              <input id="ngram-size" class="input" type="number" value="3" min="2" max="5">
+            </div>
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">最大生成 token 数</label>
+              <input id="max-tokens" class="input" type="number" value="100" min="10" max="500">
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="saveConfig()">💾 应用算法参数</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+
+    async function loadConfig() {
+      try {
+        const cfg = await API.config();
+        document.getElementById('save-mode').value = cfg.saveStrategy.mode;
+        document.getElementById('save-interval').value = cfg.saveStrategy.intervalSeconds || 30;
+        document.getElementById('fallback-mode').value = cfg.fallbackStrategy.mode;
+        document.getElementById('default-ai').value = cfg.defaultAI || 'agnes';
+        document.getElementById('temperature').value = cfg.simulate.temperature;
+        document.getElementById('ngram-size').value = cfg.simulate.ngramSize;
+        document.getElementById('max-tokens').value = cfg.simulate.maxTokens;
+
+        // 渲染 API Key 输入框
+        const providers = await API.trainProviders();
+        const container = document.getElementById('ai-keys');
+        container.innerHTML = '';
+        for (const p of providers) {
+          container.insertAdjacentHTML('beforeend', `
+            <div class="flex gap-8" style="margin-bottom:8px;align-items:center;">
+              <label style="width:120px;" class="text-muted">${p.name}</label>
+              <input class="input ai-key-input" data-provider="${p.id}" type="password"
+                     placeholder="${p.hasKey ? '✅ 已配置' : '未配置 API Key'}" style="flex:1;">
+              <button class="btn btn-sm" onclick="this.previousElementSibling.type = this.previousElementSibling.type === 'password' ? 'text' : 'password'">👁️</button>
+            </div>
+          `);
+        }
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function saveConfig() {
+      try {
+        const data = {
+          saveStrategy: {
+            mode: document.getElementById('save-mode').value,
+            intervalSeconds: parseInt(document.getElementById('save-interval').value),
+          },
+          fallbackStrategy: {
+            mode: document.getElementById('fallback-mode').value,
+          },
+          defaultAI: document.getElementById('default-ai').value,
+          proxy: {
+            http: document.getElementById('http-proxy').value || null,
+            https: document.getElementById('https-proxy').value || null,
+          },
+          simulate: {
+            temperature: parseFloat(document.getElementById('temperature').value),
+            ngramSize: parseInt(document.getElementById('ngram-size').value),
+            maxTokens: parseInt(document.getElementById('max-tokens').value),
+          },
+        };
+        await API.updateConfig(data);
+        toast('✅ 配置已应用', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function saveKeys() {
+      try {
+        const keys = {};
+        document.querySelectorAll('.ai-key-input').forEach(el => {
+          const v = el.value.trim();
+          if (v) keys[el.dataset.provider] = v;
+        });
+        await API.updateKeys(keys);
+        toast(`✅ 已更新 ${Object.keys(keys).length} 个 API Key`, 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>

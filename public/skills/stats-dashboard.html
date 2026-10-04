@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',sans-serif;padding:16px;font-size:13px}
+  h2{color:#8be9fd;margin-bottom:12px;font-size:15px}
+  .row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  button{background:#1a6dd4;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit}
+  button:hover{background:#2580f0}
+  button.secondary{background:#2a3a5a}
+  button.secondary:hover{background:#3a4a6a}
+  .panel{background:#0d1520;border:1px solid #1e2d4a;border-radius:6px;padding:12px;margin-bottom:12px}
+  .panel h3{color:#50fa7b;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .card{background:#0d1520;border:1px solid #1e2d4a;border-radius:6px;padding:14px;text-align:center}
+  .card .val{color:#8be9fd;font-size:28px;font-weight:bold;line-height:1.2}
+  .card .lbl{color:#5a6a8a;font-size:11px;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  th{text-align:left;color:#8be9fd;padding:4px 8px;border-bottom:1px solid #1e2d4a;font-size:11px}
+  td{padding:4px 8px;border-bottom:1px solid #0d1520}
+  tr:hover td{background:#0d1a2a}
+  .tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px}
+  .tag.ok{background:#153a15;color:#50fa7b}
+  .tag.err{background:#3a1515;color:#ff5555}
+  .tag.pending{background:#3a3a15;color:#f1fa8c}
+  .hint{color:#5a6a8a;font-size:11px;margin-top:4px}
+  pre{background:#0a0a0a;border:1px solid #1a1a1a;padding:8px;border-radius:4px;font-size:11px;color:#7a7a7a;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto}
+</style>
+</head>
+<body>
+<h2>📊 统计面板</h2>
+
+<div class="grid" id="cards"></div>
+
+<div class="panel" style="margin-top:12px">
+  <h3>最近训练日志</h3>
+  <table>
+    <thead><tr><th>时间</th><th>类型</th><th>状态</th><th>详情</th></tr></thead>
+    <tbody id="train-tbody"></tbody>
+  </table>
+  <div id="train-empty" class="hint" style="display:none">暂无训练记录</div>
+</div>
+
+<div class="panel">
+  <h3>权重分层统计</h3>
+  <table>
+    <thead><tr><th>Layer</th><th>Entries</th></tr></thead>
+    <tbody id="layer-tbody"></tbody>
+  </table>
+  <div id="layer-empty" class="hint" style="display:none">暂无数据</div>
+</div>
+
+<div class="row" style="margin-top:8px">
+  <button onclick="refresh()">🔄 刷新</button>
+  <button class="secondary" onclick="exportJSON()">📦 导出统计 JSON</button>
+</div>
+<div id="export-info" class="hint" style="margin-top:4px"></div>
+
+<script>
+let rawData=null;
+async function api(p,b){const r=await fetch(p,{method:b?.method||'GET',headers:{'Content-Type':'application/json'},credentials:'include',body:b?.bd?JSON.stringify(b.bd):undefined});return r.json()}
+
+function fmtSize(bytes){
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1024*1024)return (bytes/1024).toFixed(1)+' KB';
+  return (bytes/(1024*1024)).toFixed(1)+' MB';
+}
+
+function fmtTime(ts){
+  if(!ts)return '—';
+  return new Date(ts).toLocaleString('zh-CN',{hour12:false});
+}
+
+async function refresh(){
+  try{
+    const s=await api('/api/stats');
+    rawData=s;
+    document.getElementById('cards').innerHTML=[
+      {v:s.sessionCount,l:'会话数',c:'#bd93f9'},
+      {v:s.msgCount,l:'消息总数',c:'#8be9fd'},
+      {v:s.tokenCount,l:'Token 条目',c:'#50fa7b'},
+      {v:s.corpusCount,l:'语料组数',c:'#f1fa8c'},
+      {v:s.trainCount,l:'训练次数',c:'#ffb86c'},
+      {v:fmtSize(s.dbSize||0),l:'数据库大小',c:'#6272a4'}
+    ].map(c=>'<div class="card"><div class="val" style="color:'+c.c+'">'+c.v+'</div><div class="lbl">'+c.lbl+'</div></div>').join('');
+
+    const tb=document.getElementById('train-tbody');
+    const logs=s.recentTrains||[];
+    if(!logs.length){document.getElementById('train-empty').style.display='block';tb.innerHTML=''}
+    else{
+      document.getElementById('train-empty').style.display='none';
+      tb.innerHTML=logs.map(l=>'<tr><td>'+fmtTime(l.started_at)+'</td><td><span class="tag">'+esc(l.type||'?')+'</span></td><td><span class="tag '+(l.status==='completed'?'ok':'err')+'">'+(l.status||'?')+'</span></td><td>'+esc(l.notes||'')+'</td></tr>').join('');
+    }
+
+    const lt=document.getElementById('layer-tbody');
+    const layers=s.tokenByLayer||[];
+    if(!layers.length){document.getElementById('layer-empty').style.display='block';lt.innerHTML=''}
+    else{
+      document.getElementById('layer-empty').style.display='none';
+      lt.innerHTML=layers.map(l=>'<tr><td><span class="tag layer">'+esc(l.layer)+'</span></td><td>'+l.c+'</td></tr>').join('');
+    }
+  }catch(e){
+    document.getElementById('cards').innerHTML='<div class="panel"><div style="color:#ff5555">加载失败: '+esc(e.message)+'</div></div>';
+  }
+}
+
+function exportJSON(){
+  if(!rawData)return;
+  const blob=new Blob([JSON.stringify(rawData,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='stats_'+Date.now()+'.json';a.click();URL.revokeObjectURL(url);
+  document.getElementById('export-info').textContent='已导出统计 JSON';
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+refresh();
+</script>
+</body>
+</html>

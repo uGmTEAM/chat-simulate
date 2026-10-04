@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>导出会话</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#040a14;color:#c0c0c0;font-family:'Cascadia Code',monospace;font-size:13px;padding:12px}
+h2{color:#8be9fd;margin-bottom:10px;font-size:15px}
+.row{display:flex;gap:10px;margin-bottom:8px;align-items:center}
+label{color:#6272a4;width:60px;flex-shrink:0}
+select,input,button{background:#111;border:1px solid #222;color:#e0e0e0;padding:5px 10px;border-radius:3px;font-family:inherit;font-size:12px}
+button{background:#1a1a2e;border-color:#334;color:#8be9fd;cursor:pointer}
+button:hover{background:#222}
+button.primary{background:#1a3a2a;border-color:#2a5;color:#50fa7b}
+pre{background:#0a0a0a;border:1px solid #1a1a1a;padding:10px;border-radius:4px;max-height:400px;overflow-y:auto;font-size:11px;color:#7a7a7a;margin-top:10px;white-space:pre-wrap;word-break:break-all}
+#status{color:#50fa7b;margin-top:8px;font-size:12px}
+</style>
+</head>
+<body>
+<h2>📦 导出会话</h2>
+<div class="row">
+  <label>会话:</label>
+  <select id="sel-session"></select>
+  <button onclick="doExport()" class="primary">导出 JSON</button>
+</div>
+<pre id="preview">选择会话后点击导出...</pre>
+<div id="status"></div>
+<script>
+let sessions=[],mySid=null;
+async function api(p,b){const r=await fetch(p,{method:b?.method||'GET',headers:{'Content-Type':'application/json'},credentials:'include',body:b?.bd?JSON.stringify(b.bd):undefined});return r.json()}
+async function load(){
+  try{sessions=await api('/api/sessions');const s=document.getElementById('sel-session');s.innerHTML=sessions.map(x=>'<option value="'+x.id+'">'+(x.name||x.id)+' ['+x.model_name+']</option>').join('');if(mySid)s.value=mySid} catch(e){}
+}
+async function doExport(){
+  const sid=document.getElementById('sel-session').value;
+  if(!sid)return document.getElementById('status').textContent='请选择会话';
+  try{
+    const r=await api('/api/sessions/'+sid+'/export',{method:'POST'});
+    document.getElementById('preview').textContent=JSON.stringify(r.data,null,2);
+    document.getElementById('status').textContent='已导出: '+r.file;
+  }catch(e){document.getElementById('status').textContent='导出失败: '+e.message}
+}
+load();
+</script>
+</body>
+</html>

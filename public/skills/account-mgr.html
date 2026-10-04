@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',sans-serif;padding:16px;font-size:13px}
+  h2{color:#8be9fd;margin-bottom:12px;font-size:15px}
+  .row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  input,select{background:#141a2a;border:1px solid #2a3a5a;color:#c8d6e5;padding:6px 10px;border-radius:4px;font-size:13px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:#8be9fd}
+  button{background:#1a6dd4;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit}
+  button:hover{background:#2580f0}
+  button.secondary{background:#2a3a5a}
+  button.secondary:hover{background:#3a4a6a}
+  button.danger{background:#3a1515;color:#ff5555}
+  button.danger:hover{background:#4a1a1a}
+  button.success{background:#153a15;color:#50fa7b}
+  button.success:hover{background:#1a4a1a}
+  .panel{background:#0d1520;border:1px solid #1e2d4a;border-radius:6px;padding:12px;margin-bottom:12px}
+  .panel h3{color:#50fa7b;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;color:#8be9fd;padding:4px 8px;border-bottom:1px solid #1e2d4a;font-size:11px}
+  td{padding:4px 8px;border-bottom:1px solid #0d1520;vertical-align:middle}
+  tr:hover td{background:#0d1a2a}
+  .tag{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px}
+  .tag.admin{background:#2a1a4a;color:#bd93f9}
+  .tag.trainer{background:#1a2a4a;color:#8be9fd}
+  .tag.locked{background:#3a1515;color:#ff5555}
+  .tag.unlocked{background:#153a15;color:#50fa7b}
+  .hint{color:#5a6a8a;font-size:11px;margin-top:4px}
+  #msg{color:#50fa7b;font-size:12px;margin-top:8px}
+  .form-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .form-row input{flex:1}
+  .form-row label{color:#6272a4;width:70px;flex-shrink:0;font-size:12px}
+</style>
+</head>
+<body>
+<h2>👥 账号管理</h2>
+<div id="msg"></div>
+
+<div class="panel">
+  <h3>账号列表</h3>
+  <div class="row">
+    <button onclick="refresh()">🔄 刷新</button>
+  </div>
+  <table>
+    <thead><tr><th>用户名</th><th>角色</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+    <tbody id="acct-tbody"></tbody>
+  </table>
+  <div id="acct-empty" class="hint" style="display:none">暂无账号</div>
+</div>
+
+<div class="panel">
+  <h3>创建新账号</h3>
+  <div class="form-row"><label>用户名</label><input id="new-u" placeholder="用户名..."></div>
+  <div class="form-row"><label>密码</label><input id="new-p" type="password" placeholder="密码..."></div>
+  <div class="form-row"><label>确认</label><input id="new-c" type="password" placeholder="再次输入..."></div>
+  <div class="form-row">
+    <label>角色</label>
+    <select id="new-r" style="flex:1"><option value="admin">admin</option><option value="trainer" selected>trainer</option></select>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button onclick="addAccount()" class="success">➕ 创建</button>
+  </div>
+</div>
+
+<script>
+const TBODY=document.getElementById('acct-tbody'),EMPTY=document.getElementById('acct-empty'),MSG=document.getElementById('msg');
+let username='';
+async function api(p,b){
+  const r=await fetch(p,{method:b?.method||'GET',headers:{'Content-Type':'application/json'},credentials:'include',body:b?.bd?JSON.stringify(b.bd):undefined});
+  const j=await r.json();
+  if(!r.ok)throw new Error(j.error||'HTTP '+r.status);
+  return j;
+}
+
+async function refresh(){
+  try{
+    const j=await api('/api/auth/accounts');
+    const accounts=j.accounts||[];
+    if(!accounts.length){EMPTY.style.display='block';TBODY.innerHTML='';return}
+    EMPTY.style.display='none';
+    TBODY.innerHTML=accounts.map(a=>{
+      const roleTag=a.role==='admin'?'<span class="tag admin">admin</span>':'<span class="tag trainer">trainer</span>';
+      const lockTag=a.locked?'<span class="tag locked">🔒 已锁定</span>':'<span class="tag unlocked">✓ 正常</span>';
+      const time=a.created_at?new Date(a.created_at).toLocaleString('zh-CN',{hour12:false}):(a.created_at!==undefined?'—':'—');
+      const canDel=a.username!=='admin'&&a.username!=='User'?`<button class="danger" style="padding:2px 8px;font-size:11px" onclick="delAccount('${esc(a.username)}')">删除</button>`:'';
+      const lockBtn=a.locked
+        ?`<button class="success" style="padding:2px 8px;font-size:11px" onclick="unlockAccount('${esc(a.username)}')">解锁</button>`
+        :`<button class="secondary" style="padding:2px 8px;font-size:11px" onclick="lockAccount('${esc(a.username)}')">锁定</button>`;
+      return `<tr><td style="font-weight:bold;color:#e0e0e0">${esc(a.username)}</td><td>${roleTag}</td><td>${lockTag}</td><td style="color:#5a6a8a;font-size:11px">${time}</td><td>${lockBtn} ${canDel}</td></tr>`;
+    }).join('');
+  }catch(e){MSG.style.color='#ff5555';MSG.textContent='加载失败: '+e.message}
+}
+
+async function addAccount(){
+  const u=document.getElementById('new-u').value.trim();
+  const p=document.getElementById('new-p').value;
+  const c=document.getElementById('new-c').value;
+  const r=document.getElementById('new-r').value;
+  if(!u||!p)return showMsg('请填写用户名和密码','red');
+  if(p!==c)return showMsg('两次密码不一致','red');
+  try{
+    const j=await api('/api/auth/accounts/add',{method:'POST',bd:{username:u,password:p,confirm:c,role:r}});
+    showMsg(j.msg||'创建成功','green');
+    document.getElementById('new-u').value='';document.getElementById('new-p').value='';document.getElementById('new-c').value='';
+    refresh();
+  }catch(e){showMsg(e.message,'red')}
+}
+
+async function lockAccount(u){
+  try{
+    const j=await api('/api/auth/accounts/lock',{method:'POST',bd:{username:u}});
+    showMsg(j.msg,'green');refresh();
+  }catch(e){showMsg(e.message,'red')}
+}
+
+async function unlockAccount(u){
+  try{
+    const j=await api('/api/auth/accounts/unlock',{method:'POST',bd:{username:u}});
+    showMsg(j.msg,'green');refresh();
+  }catch(e){showMsg(e.message,'red')}
+}
+
+async function delAccount(u){
+  if(!confirm('确定删除账号 "'+u+'"？此操作不可撤销。'))return;
+  try{
+    const j=await api('/api/auth/accounts/del',{method:'POST',bd:{username:u,confirm:true}});
+    showMsg(j.msg,'green');refresh();
+  }catch(e){showMsg(e.message,'red')}
+}
+
+function showMsg(t,c){MSG.style.color=c==='red'?'#ff5555':'#50fa7b';MSG.textContent=t;setTimeout(()=>{if(MSG.textContent===t)MSG.textContent=''},3000)}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+refresh();
+</script>
+</body>
+</html>

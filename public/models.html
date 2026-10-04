@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模型管理 - Chat Simulate</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { display: flex; flex-direction: column; height: 100vh; background: var(--bg-primary); }
+    .top-bar { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); flex-shrink: 0; }
+    .top-bar h1 { margin: 0; font-size: 18px; }
+    .top-bar .actions { margin-left: auto; display: flex; gap: 8px; }
+    
+    .models-scroll { flex: 1; overflow-y: auto; padding: 20px; }
+    .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+    
+    .model-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: border-color .2s; }
+    .model-card:hover { border-color: var(--accent); }
+    .model-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+    .model-card h3 { margin: 0; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
+    .model-card .id { font-size: 10px; color: var(--text-muted); font-family: monospace; }
+    .model-card .stats-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip { padding: 2px 8px; border-radius: 10px; background: var(--bg-tertiary); font-size: 11px; color: var(--text-muted); }
+    .chip.good { background: rgba(34,197,94,.15); color: #22c55e; }
+    .chip.warn { background: rgba(245,158,11,.15); color: #f59e0b; }
+    .chip.info { background: rgba(59,130,246,.15); color: #3b82f6; }
+    
+    .detail-panel { margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; font-size: 11px; font-family: monospace; max-height: 200px; overflow-y: auto; display: none; }
+    .detail-panel.show { display: block; }
+    .detail-row { display: flex; padding: 2px 0; border-bottom: 1px dashed var(--border); }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-row .ctx { color: var(--accent); flex: 1; word-break: break-all; }
+    .detail-row .tok { flex: 1; word-break: break-all; }
+    .detail-row .cnt { color: #f59e0b; min-width: 32px; text-align: right; }
+    
+    .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mini-btn { padding: 4px 10px; font-size: 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-primary); cursor: pointer; color: var(--text-primary); }
+    .mini-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .mini-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+    .mini-btn.danger { color: #ef4444; border-color: #ef4444; }
+    .mini-btn.danger:hover { background: rgba(239,68,68,.1); }
+    
+    /* 底部训练栏 */
+    .train-bar { flex-shrink: 0; border-top: 2px solid var(--accent); background: var(--bg-secondary); padding: 14px 20px; }
+    .train-bar .row1 { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .train-bar label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .train-bar select { flex: 1; padding: 6px 10px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 13px; }
+    .train-bar .repeats-wrap { display: flex; align-items: center; gap: 6px; }
+    .train-bar input[type="number"] { width: 50px; padding: 4px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); }
+    
+    .train-bar .row2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: stretch; }
+    .train-bar .input-pair { display: flex; flex-direction: column; }
+    .train-bar .input-pair .lbl { font-size: 10px; color: var(--text-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1px; }
+    .train-bar textarea { width: 100%; min-height: 56px; max-height: 120px; padding: 8px 10px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px; resize: vertical; font-family: inherit; }
+    .train-bar textarea:focus { outline: none; border-color: var(--accent); }
+    .train-bar .btn-train { padding: 0 20px; background: linear-gradient(135deg, var(--accent), #6366f1); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .train-bar .btn-train:hover { transform: translateY(-1px); }
+    .train-bar .btn-train:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .train-bar .status-bar { margin-top: 8px; font-size: 11px; color: var(--text-muted); display: flex; gap: 12px; align-items: center; }
+    .train-bar .status-bar .ok { color: #22c55e; }
+    .train-bar .status-bar .err { color: #ef4444; }
+    
+    @media (max-width: 1024px) {
+      .model-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+      .train-bar .row2 { grid-template-columns: 1fr; }
+      .train-bar .row2 .btn-train { padding: 10px; }
+    }
+    @media (max-width: 768px) {
+      .model-grid { grid-template-columns: 1fr; }
+      .train-bar { padding: 12px; }
+      .train-bar .row1 { flex-wrap: wrap; gap: 8px; }
+      .train-bar select { flex: 1 1 100%; }
+      .card-actions { flex-wrap: wrap; }
+      .mini-btn { flex: 1; min-width: 70px; text-align: center; }
+    }
+    @media (max-width: 480px) {
+      .model-card { padding: 12px; }
+      .model-card h3 { font-size: 14px; }
+      .chip { font-size: 12px; padding: 4px 10px; }
+      .train-bar textarea { min-height: 70px; font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部栏 -->
+  <div class="top-bar">
+    <h1>🧠 模型管理</h1>
+    <div style="margin-left:auto;display:flex;gap:8px;">
+      <button class="btn btn-sm btn-primary" onclick="createNewModel()">+ 新建模型</button>
+    </div>
+  </div>
+
+  <!-- 模型列表 -->
+  <div class="models-scroll">
+    <div class="model-grid" id="model-grid"></div>
+  </div>
+
+  <!-- 底部训练栏 -->
+  <div class="train-bar">
+    <div class="row1">
+      <label>训练到模型：</label>
+      <select id="train-model">
+        <option value="">-- 选择模型 --</option>
+      </select>
+      <div class="repeats-wrap">
+        <label>重复次数：</label>
+        <input type="number" id="train-repeats" value="4" min="1" max="30" title="训练时重复写入次数，越多权重越高">
+      </div>
+      <button class="btn btn-sm" onclick="showBatchDialog()" title="批量训练 JSON pairs">📋 批量</button>
+      <button class="btn btn-sm" onclick="showTestDialog()" title="测试模型回复">🔍 测试</button>
+    </div>
+    <div class="row2">
+      <div class="input-pair">
+        <div class="lbl">👤 用户输入</div>
+        <textarea id="train-input" placeholder="你好" rows="2"></textarea>
+      </div>
+      <div class="input-pair">
+        <div class="lbl">🤖 期望输出</div>
+        <textarea id="train-output" placeholder="你好呀！很高兴见到你～" rows="2"></textarea>
+      </div>
+      <button class="btn-train" onclick="doTrain()">▶ 训练</button>
+    </div>
+    <div class="status-bar" id="train-status"></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    let models = [];
+    let selectedModelId = null;
+
+    async function init() {
+      await refreshModels();
+      // 默认选第一个模型
+      if (models.length) selectModel(models[0].id);
+    }
+
+    async function refreshModels() {
+      try {
+        models = await API.models();
+        renderModels();
+        renderTrainSelect();
+      } catch(e) { toast('加载失败: ' + e.message, 'err'); }
+    }
+
+    function renderTrainSelect() {
+      const sel = document.getElementById('train-model');
+      sel.innerHTML = models.map(m => `<option value="${m.id}" ${selectedModelId === m.id ? 'selected' : ''}>${m.name} (${m.weight_count || 0}条)</option>`).join('');
+    }
+
+    function selectModel(id) {
+      selectedModelId = id;
+      renderTrainSelect();
+      renderModels(); // 更新 selected 样式
+    }
+
+    function renderModels() {
+      const grid = document.getElementById('model-grid');
+      if (!models.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted);">还没有模型，点右上角 + 新建模型 创建第一个</div>';
+        return;
+      }
+      grid.innerHTML = models.map(m => {
+        const byLayer = m.weight_list_by_layer || {};
+        const total = m.weight_count || 0;
+        const totalCount = m.weight_total_count || 0;
+        const pct = layer => total > 0 ? Math.round((byLayer[layer] || 0) / total * 100) : 0;
+        const isBlank = total === 0;
+        
+        return `
+          <div class="model-card ${selectedModelId === m.id ? 'selected' : ''}" onclick="selectModel('${m.id}')">
+            <h3>
+              <span>${isBlank ? '📭' : '🧠'} ${escapeHtml(m.name)}</span>
+              <span style="display:flex;gap:4px;">
+                <button class="mini-btn" onclick="event.stopPropagation();toggleDetail('${m.id}')">详情</button>
+                <button class="mini-btn" onclick="event.stopPropagation();exportModel('${m.id}')">⬇️</button>
+              </span>
+            </h3>
+            <div class="id">${m.id}</div>
+            <div class="stats-row">
+              <span class="chip ${isBlank ? 'warn' : 'good'}">权重 ${total}</span>
+              <span class="chip info">总count ${totalCount}</span>
+              <span class="chip">sent ${byLayer.sentence || 0}</span>
+              <span class="chip">word ${byLayer.word || 0}</span>
+              <span class="chip">char ${byLayer.char || 0}</span>
+            </div>
+            <div class="stats-row">
+              <span class="chip" style="min-width:48px;">char ${pct('char')}%</span>
+              <span class="chip" style="min-width:48px;">word ${pct('word')}%</span>
+              <span class="chip" style="min-width:48px;">sent ${pct('sentence')}%</span>
+            </div>
+            ${m.created_at ? `<div class="id">创建: ${new Date(m.created_at).toLocaleString()}</div>` : ''}
+            
+            <!-- 展开的权重详情 -->
+            <div id="detail-${m.id}" class="detail-panel"></div>
+            
+            <div class="card-actions" onclick="event.stopPropagation()">
+              <button class="mini-btn primary" onclick="selectModel('${m.id}')">选来训练</button>
+              <button class="mini-btn" onclick="testQuick('${m.id}')">🔍 快速测试</button>
+              <button class="mini-btn danger" onclick="deleteModel('${m.id}')">删除</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function toggleDetail(id) {
+      const panel = document.getElementById('detail-' + id);
+      const wasShown = panel.classList.contains('show');
+      // 先关掉所有
+      document.querySelectorAll('.detail-panel').forEach(p => p.classList.remove('show'));
+      if (wasShown) return;
+      panel.classList.add('show');
+      if (!panel.dataset.loaded) {
+        panel.textContent = '加载中...';
+        try {
+          const m = await fetch('/api/models/' + id).then(r => r.json());
+          const wl = m.weight_list || [];
+          if (!wl.length) { panel.textContent = '（无权重数据）'; }
+          else {
+            panel.innerHTML = wl.slice(0, 80).map(w => `
+              <div class="detail-row">
+                <span class="ctx">[${w.layer}] ${escapeHtml(w.context || '')}</span>
+                <span class="tok">→ ${escapeHtml(w.token || '')}</span>
+                <span class="cnt">×${w.count}</span>
+              </div>
+            `).join('') + (wl.length > 80 ? `<div style="color:var(--text-muted);text-align:center;padding:6px;">...还有 ${wl.length - 80} 条（只显示前80）</div>` : '');
+          }
+          panel.dataset.loaded = '1';
+        } catch(e) { panel.textContent = '加载失败: ' + e.message; }
+      }
+    }
+
+    async function doTrain() {
+      const sel = document.getElementById('train-model').value;
+      const input = document.getElementById('train-input').value.trim();
+      const output = document.getElementById('train-output').value.trim();
+      const repeats = parseInt(document.getElementById('train-repeats').value) || 4;
+      const status = document.getElementById('train-status');
+      
+      if (!sel) { toast('先选一个模型', 'err'); return; }
+      if (!input || !output) { toast('输入和输出都要填', 'err'); return; }
+
+      status.innerHTML = '<span>训练中...</span>';
+      try {
+        for (let i = 0; i < repeats; i++) {
+          await API.trainModel(sel, input, output);
+          // thinking 也训练一下（如果重复次数多）
+          if (i === 0 && input.length < 20) {
+            await API.trainModel(sel, 'think|' + input, '嗯，' + input + '。让我想想怎么回应。');
+          }
+          status.innerHTML = `<span class="ok">✓ 第 ${i + 1}/${repeats} 次</span>`;
+        }
+        toast(`训练完成: "${input}" → "${output}" × ${repeats}`, 'ok');
+        document.getElementById('train-input').value = '';
+        document.getElementById('train-output').value = '';
+        await refreshModels();
+        if (selectedModelId) {
+          const sel2 = document.getElementById('train-model');
+          sel2.value = selectedModelId;
+        }
+        status.innerHTML = `<span class="ok">✓ 完成 共 ${repeats} 次</span>`;
+      } catch(e) {
+        status.innerHTML = `<span class="err">✗ ${e.message}</span>`;
+        toast('训练失败: ' + e.message, 'err');
+      }
+    }
+
+    async function showBatchDialog() {
+      const modelId = document.getElementById('train-model').value;
+      if (!modelId) { toast('先选模型', 'err'); return; }
+      const text = prompt('批量训练 — 每行一个 pair，格式：\n用户输入 → 期望输出\n\n例如：\n你好 → 你好呀！\nhi → Hi there!');
+      if (!text) return;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      const pairs = lines.map(l => {
+        const m = l.match(/^(.+?)\s*→\s*(.+)$/);
+        return m ? { input: m[1].trim(), output: m[2].trim() } : null;
+      }).filter(Boolean);
+      if (!pairs.length) { toast('没解析到有效 pairs', 'err'); return; }
+      const repeats = parseInt(document.getElementById('train-repeats').value) || 4;
+      try {
+        let done = 0;
+        for (const p of pairs) {
+          for (let i = 0; i < repeats; i++) {
+            await API.trainModel(modelId, p.input, p.output);
+          }
+          done++;
+        }
+        toast(`批量训练 ${done} pairs × ${repeats} 完成`, 'ok');
+        await refreshModels();
+      } catch(e) { toast('批量训练失败: ' + e.message, 'err'); }
+    }
+
+    async function showTestDialog() {
+      const modelId = document.getElementById('train-model').value;
+      if (!modelId) { toast('先选模型', 'err'); return; }
+      const input = prompt('测试输入：', '你好');
+      if (!input) return;
+      try {
+        const r = await API.testModel(modelId, input);
+        toast(`输入 "${input}" → 精确匹配: ${r.exact_match ? r.exact_match : '（无）'}`, 'ok');
+      } catch(e) { toast('测试失败: ' + e.message, 'err'); }
+    }
+
+    async function testQuick(id) {
+      const input = prompt('快速测试 — 输入一句：', '你好');
+      if (!input) return;
+      try {
+        const r = await API.testModel(id, input);
+        toast(`"${input}" → ${r.exact_match || '（无精确匹配，走N-gram生成）'}`, 'ok');
+      } catch(e) { toast('失败: ' + e.message, 'err'); }
+    }
+
+    async function exportModel(id) {
+      try {
+        window.location.href = '/api/models/' + id + '/export';
+      } catch(e) { toast('导出失败: ' + e.message, 'err'); }
+    }
+
+    async function deleteModel(id) {
+      if (!confirm('确定删除这个模型？')) return;
+      try {
+        await API.deleteModel(id);
+        if (selectedModelId === id) selectedModelId = null;
+        await refreshModels();
+        toast('已删除', 'ok');
+      } catch(e) { toast('删除失败: ' + e.message, 'err'); }
+    }
+
+    async function createNewModel() {
+      const name = prompt('模型名字：', '新模型');
+      if (!name) return;
+      try {
+        const m = await API.createModel(name);
+        selectedModelId = m.id;
+        await refreshModels();
+        toast('创建成功', 'ok');
+      } catch(e) { toast('创建失败: ' + e.message, 'err'); }
+    }
+
+    function toast(msg, type='info') {
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.cssText = `position:fixed;bottom:120px;left:50%;transform:translateX(-50%);padding:8px 16px;background:${type==='err'?'#ef4444':type==='ok'?'#22c55e':'var(--accent)'};color:white;border-radius:8px;font-size:12px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3);`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+    }
+
+    function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // 启动
+    init();
+  </script>
+</body>
+</html>

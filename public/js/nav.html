@@ -1,0 +1,105 @@
+<!-- Chat Simulate - 侧边栏导航组件 (通过 iframe 或直接内嵌) -->
+<!-- 每个页面都包含此导航 -->
+<div class="sidebar">
+  <div class="card" style="padding:16px;margin:12px;border:1px solid var(--accent);background:linear-gradient(135deg, var(--accent) 0%, #4f46e5 100%);">
+    <div style="font-size:14px;font-weight:700;color:white;">💬 Chat Simulate</div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:2px;">对话模拟训练平台</div>
+  </div>
+
+  <div class="nav-section">主功能</div>
+  <nav class="nav">
+    <div class="nav-item" onclick="location.href='/'">
+      <span class="icon">💬</span><span>对话</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/weights.html'">
+      <span class="icon">🔤</span><span>权重可视化</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/train.html'">
+      <span class="icon">🎓</span><span>训练中心</span>
+    </div>
+
+    <div class="nav-section">数据管理</div>
+    <div class="nav-item" onclick="location.href='/snapshot.html'">
+      <span class="icon">📸</span><span>快照管理</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/data.html'">
+      <span class="icon">📚</span><span>语料库</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/search.html'">
+      <span class="icon">🔍</span><span>搜索</span>
+    </div>
+
+    <div class="nav-section">系统</div>
+    <div class="nav-item" onclick="location.href='/config.html'">
+      <span class="icon">⚙️</span><span>配置</span>
+    </div>
+    <div class="nav-item" onclick="showStats()">
+      <span class="icon">📊</span><span>统计</span>
+    </div>
+  </nav>
+
+  <div style="padding:12px;border-top:1px solid var(--border);">
+    <div class="flex gap-8">
+      <button class="btn btn-primary w-full" onclick="API.saveModel().then(() => toast('已保存到数据库', 'success')).catch(e => toast(e.message, 'error'))">
+        💾 手动保存
+      </button>
+    </div>
+    <div id="api-status" class="text-muted text-center" style="margin-top:8px;font-size:11px;">检测连接中...</div>
+  </div>
+</div>
+
+<script>
+// 高亮当前页面导航
+(function highlightNav() {
+  const path = location.pathname;
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const href = item.getAttribute('onclick') || '';
+    if ((path === '/' || path === '/index.html') && href.includes("location.href='/'")) {
+      item.classList.add('active');
+    } else if (href.includes(path)) {
+      item.classList.add('active');
+    }
+  });
+})();
+
+// API 连接检查
+(async function checkApi() {
+  try {
+    const stats = await API.stats();
+    const el = document.getElementById('api-status');
+    if (el) {
+      el.innerHTML = `<span class="text-success">● 在线</span> · ${stats.tokenCount.toLocaleString()} tokens`;
+    }
+  } catch (e) {
+    const el = document.getElementById('api-status');
+    if (el) el.innerHTML = '<span class="text-danger">● 离线</span>';
+  }
+})();
+
+// 快速统计弹窗
+window.showStats = async function() {
+  try {
+    const stats = await API.stats();
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal">
+        <h3>📊 系统统计</h3>
+        <div class="stats-grid" style="padding:0;">
+          <div class="stat-card"><div class="stat-value">${stats.tokenCount.toLocaleString()}</div><div class="stat-label">Token 权重</div></div>
+          <div class="stat-card"><div class="stat-value">${stats.sessionCount}</div><div class="stat-label">会话数</div></div>
+          <div class="stat-card"><div class="stat-value">${stats.msgCount}</div><div class="stat-label">消息数</div></div>
+          <div class="stat-card"><div class="stat-value">${stats.corpusCount}</div><div class="stat-label">语料组</div></div>
+          <div class="stat-card"><div class="stat-value">${stats.trainCount}</div><div class="stat-label">已完成训练</div></div>
+          <div class="stat-card"><div class="stat-value">${(stats.dbSize/1024).toFixed(1)} KB</div><div class="stat-label">DB 大小</div></div>
+        </div>
+        <div style="text-align:right;margin-top:16px;">
+          <button class="btn" onclick="this.closest('.modal-overlay').remove()">关闭</button>
+        </div>
+      </div>
+    `;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  } catch (e) { toast(e.message, 'error'); }
+};
+</script>

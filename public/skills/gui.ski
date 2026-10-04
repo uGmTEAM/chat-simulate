@@ -1,0 +1,12 @@
+{
+  "name": "gui",
+  "version": "1.0.0",
+  "description": "图形管理面板 — 模型选择、快捷命令、训练状态监控",
+  "author": "chat-simulate",
+  "tags": ["gui", "model", "dashboard"],
+  "commands": ["gui"],
+  "capabilities": ["gui-panel"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/gui.html"
+}

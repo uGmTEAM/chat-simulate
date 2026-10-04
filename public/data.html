@@ -1,0 +1,129 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>语料库 & 数据管理 - Chat Simulate</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    
+    <div class="main-content">
+      <div class="header">
+        <h1>📚 语料库 & 数据管理</h1>
+      </div>
+      <div class="page-container">
+        <div class="card">
+          <div class="card-title">导入内置语料库</div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:12px;">首次启动时已自动导入。如果手动清空了，可以重新导入。</p>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="importBuiltin()">📥 导入内置语料库</button>
+            <button class="btn" onclick="checkStatus()">🔄 检查状态</button>
+          </div>
+          <div id="dataset-status" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">上传自定义语料库 (JSON)</div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:12px;">格式: <code>[{"input":"...","output":"..."}, ...]</code></p>
+          <input type="file" id="file-input" accept=".json" class="input" style="max-width:400px;padding:8px;">
+          <div style="margin-top:12px;">
+            <pre id="file-preview" style="background:var(--bg-primary);padding:12px;border-radius:8px;font-size:12px;max-height:200px;overflow:auto;"></pre>
+          </div>
+          <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="importJson()">📥 导入选中的 JSON</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">导出 / 备份</div>
+          <div style="display:flex;gap:8px;">
+            <a href="/api/models" class="btn btn-primary">📤 导出模型为 JSON</a>
+            <button class="btn" onclick="saveNow()">💾 立即保存到数据库</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">⚠️ 危险操作</div>
+          <button class="btn btn-danger" onclick="clearUserCorpus()">🗑️ 清空用户上传的语料</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+
+    let pendingJsonData = null;
+
+    async function checkStatus() {
+      try {
+        const s = await API.datasetStatus();
+        const el = document.getElementById('dataset-status');
+        el.innerHTML = `
+          <div class="flex gap-16" style="font-size:13px;">
+            <div><span class="text-muted">内置文件存在：</span>${s.builtinExists ? '<span class="text-success">✅</span>' : '<span class="text-danger">❌</span>'}</div>
+            <div><span class="text-muted">内置条数：</span>${s.builtinSize}</div>
+            <div><span class="text-muted">已导入 DB：</span><span class="text-accent">${s.importedInDB}</span></div>
+          </div>
+        `;
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function importBuiltin() {
+      try {
+        const res = await API.datasetImportBuiltin();
+        toast(`✅ 导入 ${res.imported} 组`, 'success');
+        checkStatus();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    document.getElementById('file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) throw new Error('必须是 JSON 数组');
+        pendingJsonData = data;
+        document.getElementById('file-preview').textContent = JSON.stringify(data.slice(0, 5), null, 2) + `\n... (共 ${data.length} 条)`;
+        toast(`已加载 ${data.length} 条数据`, 'success');
+      } catch (err) {
+        toast('❌ JSON 解析失败: ' + err.message, 'error');
+        pendingJsonData = null;
+      }
+    });
+
+    async function importJson() {
+      if (!pendingJsonData) return toast('请先选择文件', 'error');
+      try {
+        const res = await API.datasetImportCustom(pendingJsonData);
+        toast(`✅ 导入 ${res.imported} 组并已训练`, 'success');
+        pendingJsonData = null;
+        document.getElementById('file-input').value = '';
+        document.getElementById('file-preview').textContent = '';
+        checkStatus();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function saveNow() {
+      try {
+        await API.saveModel();
+        toast('✅ 已保存', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function clearUserCorpus() {
+      if (!confirm('⚠️ 清空所有非内置的语料？')) return;
+      try {
+        await API.clearDataset();
+        toast('已清空', 'success');
+        checkStatus();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    checkStatus();
+  </script>
+</body>
+</html>

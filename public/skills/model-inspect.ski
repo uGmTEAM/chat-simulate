@@ -1,0 +1,12 @@
+{
+  "name": "model-inspect",
+  "version": "1.0.0",
+  "description": "模型详情 — 查看权重分布、Top Token、在线测试",
+  "author": "chat-simulate",
+  "tags": ["model", "inspect", "stats"],
+  "commands": ["model-inspect", "minspect", "mtest"],
+  "capabilities": ["model-inspection"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/model-inspect.html"
+}

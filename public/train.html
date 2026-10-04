@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>训练中心 - Chat Simulate</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    
+    <div class="main-content">
+      <div class="header">
+        <h1>🎓 训练中心</h1>
+      </div>
+      <div class="page-container">
+        <!-- 手动训练 -->
+        <div class="card">
+          <div class="card-title">✏️ 手动训练：输入 → 输出</div>
+          <p class="text-muted" style="font-size:12px;margin-bottom:16px;">告诉 AI 在某种输入下应该给出什么回复，训练它的 Token 权重</p>
+          <div class="flex gap-16">
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">用户输入 (Input)</label>
+              <textarea id="train-input" class="textarea" placeholder="例如：你好"></textarea>
+            </div>
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">期望回复 (Output)</label>
+              <textarea id="train-output" class="textarea" placeholder="例如：你好呀！很高兴见到你~"></textarea>
+            </div>
+          </div>
+          <div style="margin-top:16px;text-align:right;">
+            <button class="btn btn-primary" onclick="manualTrain()">🚀 开始训练</button>
+          </div>
+        </div>
+
+        <!-- 云训练 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">☁️ 云训练（调用 AI API 自动生成并训练）</div>
+          <div class="flex gap-16">
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">AI 供应商</label>
+              <select id="cloud-provider" class="select"></select>
+            </div>
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">训练模式</label>
+              <select id="cloud-mode" class="select">
+                <option value="generate">generate - AI生成→训练</option>
+                <option value="analyze">analyze - AI分析→训练</option>
+                <option value="hybrid">hybrid - 混合模式</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label class="text-muted" style="font-size:12px;">训练轮数</label>
+              <input id="cloud-rounds" class="input" type="number" value="30" min="5" max="500">
+            </div>
+          </div>
+          <div style="margin-top:16px;" class="flex gap-8">
+            <button class="btn btn-primary" onclick="startCloudTrain()">🚀 启动云训练</button>
+            <button class="btn btn-danger" onclick="stopCloudTrain()">⏹️ 停止选中任务</button>
+            <button class="btn" onclick="refreshTasks()">🔄 刷新任务列表</button>
+            <button class="btn" onclick="createSnap()">📸 创建快照（训练前自动创建）</button>
+          </div>
+        </div>
+
+        <!-- 活跃任务 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title flex-between">
+            <span>📋 活跃任务</span>
+            <button class="btn btn-sm" onclick="refreshTasks()">🔄 刷新</button>
+          </div>
+          <div id="tasks-list"></div>
+        </div>
+
+        <!-- 训练日志 -->
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">📜 最近训练日志</div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>类型</th><th>状态</th><th>权重变化</th><th>开始时间</th><th>完成时间</th>
+                </tr>
+              </thead>
+              <tbody id="train-logs-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+
+    let selectedTaskId = null;
+
+    async function loadProviders() {
+      try {
+        const providers = await API.trainProviders();
+        const sel = document.getElementById('cloud-provider');
+        sel.innerHTML = providers.map(p =>
+          `<option value="${p.id}">${p.name} ${p.hasKey ? '' : '(未配置Key)'}</option>`
+        ).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function manualTrain() {
+      const input = document.getElementById('train-input').value.trim();
+      const output = document.getElementById('train-output').value.trim();
+      if (!input || !output) return toast('请填写输入和输出', 'error');
+      try {
+        const res = await API.train(input, output);
+        toast(`✅ 训练完成: +${res.weightChanges} 权重`, 'success');
+        document.getElementById('train-input').value = '';
+        document.getElementById('train-output').value = '';
+        loadTrainLogs();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function startCloudTrain() {
+      const provider = document.getElementById('cloud-provider').value;
+      const mode = document.getElementById('cloud-mode').value;
+      const maxRounds = parseInt(document.getElementById('cloud-rounds').value);
+      try {
+        const res = await API.cloudTrainStart({ provider, mode, maxRounds });
+        toast(`🚀 任务已启动: ${res.taskId}`, 'success');
+        selectedTaskId = res.taskId;
+        refreshTasks();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function stopCloudTrain() {
+      if (!selectedTaskId) return toast('请先选择一个任务', 'error');
+      try {
+        await API.cloudTrainStop(selectedTaskId);
+        toast('⏹️ 已发送停止信号', 'success');
+        refreshTasks();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function createSnap() {
+      try {
+        const res = await API.createSnapshot('手动创建快照', null);
+        toast(`📸 快照 #${res.id} 已创建`, 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function refreshTasks() {
+      try {
+        const tasks = await API.cloudTrainStatus();
+        const container = document.getElementById('tasks-list');
+        if (!Array.isArray(tasks) || tasks.length === 0) {
+          container.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;">暂无活跃训练任务</div>';
+          return;
+        }
+        container.innerHTML = '';
+        for (const t of tasks) {
+          const statusColors = {
+            created: 'tag', running: 'tag info', completed: 'tag success',
+            interrupted: 'tag warning', failed: 'tag danger',
+          };
+          const selected = selectedTaskId === t.taskId ? 'border:2px solid var(--accent);' : '';
+          container.insertAdjacentHTML('beforeend', `
+            <div style="padding:12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:8px;cursor:pointer;${selected}"
+                 onclick="selectTask('${t.taskId}')">
+              <div class="flex-between">
+                <div>
+                  <span style="font-weight:600;">${t.taskId}</span>
+                  <span class="tag ${statusColors[t.status]}">${t.status}</span>
+                  <span class="text-muted" style="margin-left:8px;">provider=${t.provider} mode=${t.mode}</span>
+                </div>
+                <button class="btn btn-sm" onclick="showTaskLogs('${t.taskId}')">📜 查看日志</button>
+              </div>
+              <div style="margin-top:8px;">
+                <div class="progress-container">
+                  <div class="progress-bar" style="width:${t.progress}%"></div>
+                </div>
+                <div class="text-muted" style="font-size:11px;margin-top:4px;">进度 ${t.progress}%</div>
+              </div>
+            </div>
+          `);
+        }
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function selectTask(id) {
+      selectedTaskId = id;
+      refreshTasks();
+      showTaskLogs(id);
+    }
+
+    async function showTaskLogs(taskId) {
+      try {
+        const logs = await API.cloudTrainLogs(taskId, 30);
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        const logsHtml = logs.map(l => {
+          const cls = { info: 'log-info', warn: 'log-warn', error: 'log-error' }[l.level] || 'log-info';
+          return `<div class="log-line ${cls}">[${new Date(l.time).toLocaleTimeString()}] ${l.msg}</div>`;
+        }).join('');
+        modal.innerHTML = `
+          <div class="modal" style="max-width:700px;">
+            <h3>📜 训练日志 - ${taskId}</h3>
+            <div class="log-container">${logsHtml || '<div class="text-muted">暂无日志</div>'}</div>
+            <div style="margin-top:16px;text-align:right;">
+              <button class="btn" onclick="this.closest('.modal-overlay').remove()">关闭</button>
+            </div>
+          </div>
+        `;
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        document.body.appendChild(modal);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function loadTrainLogs() {
+      try {
+        const logs = await API.request('/api/train/logs?limit=20');
+        const body = document.getElementById('train-logs-body');
+        body.innerHTML = '';
+        for (const l of logs) {
+          const statusTag = {
+            completed: '<span class="tag success">完成</span>',
+            running: '<span class="tag info">进行中</span>',
+            failed: '<span class="tag danger">失败</span>',
+            interrupted: '<span class="tag warning">中断</span>',
+          }[l.status] || l.status;
+          body.insertAdjacentHTML('beforeend', `
+            <tr>
+              <td>${l.id}</td>
+              <td>${l.type}</td>
+              <td>${statusTag}</td>
+              <td>+${l.weights_changed || 0}</td>
+              <td>${formatTime(l.started_at)}</td>
+              <td>${l.completed_at ? formatTime(l.completed_at) : '-'}</td>
+            </tr>
+          `);
+        }
+      } catch (e) {}
+    }
+
+    loadProviders();
+    loadTrainLogs();
+    refreshTasks();
+    // 定时刷新
+    setInterval(() => { refreshTasks(); loadTrainLogs(); }, 3000);
+  </script>
+</body>
+</html>

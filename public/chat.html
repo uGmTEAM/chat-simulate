@@ -1,0 +1,756 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Simulate - 对话</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .bubble-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .bubble-actions .btn { opacity: 0.55; transition: opacity 0.15s; }
+    .bubble-actions .btn:hover { opacity: 1; }
+    .bubble-row { display: flex; align-items: flex-start; gap: 6px; }
+    .bubble-row .bubble { flex: 1; min-width: 0; }
+    .bubble-row .bubble-actions { flex-direction: column; gap: 4px; margin-top: 2px; flex-shrink: 0; }
+    .bubble-row .bubble-actions .btn { padding: 2px 8px; }
+    .thinking-block { margin-top: 8px; border-left: 3px solid var(--accent); padding: 4px 10px; background: var(--bg-tertiary); border-radius: 4px; font-size: 12px; }
+    .thinking-block summary { cursor: pointer; color: var(--text-muted); user-select: none; padding: 2px 0; }
+    .thinking-block summary:hover { color: var(--accent); }
+    .thinking-block textarea { width: 100%; min-height: 60px; margin-top: 6px; padding: 6px 8px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); font-size: 12px; font-family: inherit; resize: vertical; }
+    .thinking-block .thinking-actions { margin-top: 4px; display: flex; gap: 6px; }
+    .thinking-block .thinking-actions .btn { padding: 2px 10px; font-size: 11px; }
+    .messages-container { overflow-y: auto; }
+    /* 会话 tab */
+    .sess-tab { flex: 1; padding: 10px 6px; text-align: center; font-size: 12px; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.15s; }
+    .sess-tab:hover { color: var(--text-primary); }
+    .sess-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .session-item { border-left: 2px solid transparent; }
+    .session-item[data-type="train"] { border-left-color: #f59e0b; }
+    .session-item[data-type="chat"] { border-left-color: #3b82f6; }
+    /* 消息气泡操作 */
+    .msg-actions { display: flex; gap: 4px; margin-top: 6px; opacity: 0; transition: opacity 0.2s; flex-wrap: wrap; }
+    .bubble:hover .msg-actions { opacity: 1; }
+    .msg-actions .btn { padding: 2px 8px; font-size: 11px; }
+    /* ===== chat.html 专用响应式 ===== */
+    @media (max-width: 1024px) {
+      .bubble-actions { gap: 4px; }
+      .bubble-row { gap: 4px; }
+    }
+    @media (max-width: 768px) {
+      .bubble-row { flex-direction: column; align-items: stretch; }
+      .bubble-row .bubble-actions { flex-direction: row; margin-top: 6px; flex-shrink: initial; justify-content: flex-end; }
+      .msg-actions { opacity: 1; }
+      .thinking-block { font-size: 13px; padding: 6px 12px; margin: 8px 4px; }
+      .thinking-block textarea { font-size: 14px; min-height: 80px; }
+      .thinking-block summary { padding: 4px 0; }
+    }
+    @media (max-width: 480px) {
+      .bubble-actions .btn, .msg-actions .btn { padding: 6px 12px; font-size: 13px; min-height: 32px; }
+      .thinking-block .thinking-actions { flex-wrap: wrap; }
+      .thinking-block .thinking-actions .btn { flex: 1; padding: 8px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="main-content">
+      <div class="header">
+        <h1>💬 对话</h1>
+        <div class="flex gap-8" style="margin-left:auto;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:12px;color:var(--text-muted);">模型:</label>
+            <select id="model-select" class="btn btn-sm" style="padding:4px 10px;font-size:12px;" onchange="switchSessionModel(this.value)">
+              <option value="">加载中...</option>
+            </select>
+          </div>
+          <a href="/models.html" class="btn btn-sm" style="text-decoration:none;">🧠 模型管理</a>
+          <a href="/config.html" class="btn btn-sm" style="text-decoration:none;">⚙️ API</a>
+          <button class="btn btn-sm" onclick="showHelp()">❓</button>
+          <button class="btn btn-sm btn-primary" onclick="createNewSession()">+ 新会话</button>
+        </div>
+      </div>
+      <div id="chat-app" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const STORAGE_KEY = 'chat-simulate:last-session';
+    let currentSessionId = null;
+    let sessions = [];
+    let currentSessTab = 'chat'; // 'chat' | 'train'
+
+    function switchSessTab(tab) {
+      if (!document.getElementById('sess-list')) return;
+      currentSessTab = tab;
+      document.querySelectorAll('.sess-tab').forEach(el => {
+        el.classList.toggle('active', el.dataset.tab === tab);
+      });
+      renderSessionList();
+    }
+    let messages = [];
+    let isStreaming = false;
+    let currentGenId = null;
+    let fetchAbortController = null;
+
+    // ===== 启动 =====
+    async function init() {
+      try { sessions = await API.sessions(); } catch (e) { sessions = []; }
+      try { renderSessionList(); } catch(e) {}
+      await loadModelSelect();
+
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && sessions.some(s => s.id === parseInt(saved))) {
+        await selectSession(parseInt(saved));
+      } else if (sessions.length > 0) {
+        await selectSession(sessions[0].id);
+      } else {
+        renderChatEmpty();
+      }
+    }
+
+    let allModels = [];
+    async function loadModelSelect() {
+      try {
+        allModels = await API.models();
+      } catch (e) { allModels = []; }
+      const sel = document.getElementById('model-select');
+      sel.innerHTML = allModels.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.weight_count||0})</option>`).join('');
+      if (currentSessionId) {
+        const s = sessions.find(x => x.id === currentSessionId);
+        if (s && s.model_id) sel.value = s.model_id;
+      }
+    }
+
+    async function switchSessionModel(modelId) {
+      if (!currentSessionId || !modelId) return;
+      try {
+        await API.updateSession(currentSessionId, { model_id: modelId });
+        sessions = await API.sessions();
+        renderSessionList();
+        await selectSession(currentSessionId);
+        toast('已切换模型');
+      } catch (e) { toast('切换失败: ' + e.message, 'error'); }
+    }
+
+    async function loadSessions() {
+      try {
+        sessions = await API.sessions();
+        renderSessionList();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function renderSessionList() {
+      const list = document.getElementById('sess-list');
+      if (!list) return;
+      list.innerHTML = '';
+      const filtered = sessions.filter(s => (s.type || 'chat') === currentSessTab);
+      if (!filtered.length) {
+        const emptyLabel = currentSessTab === 'chat' ? '暂无聊天会话' : '暂无训练会话';
+        list.innerHTML = `<div class="text-muted" style="padding:12px;font-size:12px;text-align:center;">${emptyLabel}</div>`;
+        return;
+      }
+      for (const s of filtered) {
+        const typeBadge = currentSessTab === 'train'
+          ? '<span style="color:#f59e0b;font-size:10px;margin-right:4px;">🧠</span>'
+          : '<span style="color:#3b82f6;font-size:10px;margin-right:4px;">💬</span>';
+        const modelBadge = s.model_name ? `<span style="color:var(--text-muted);font-size:10px;">· ${escapeHtml(s.model_name)}</span>` : '';
+        list.insertAdjacentHTML('beforeend', `
+          <div class="session-item ${s.id === currentSessionId ? 'active' : ''}" data-type="${s.type || 'chat'}" onclick="selectSession(${s.id})">
+            <div class="flex-between">
+              <div class="session-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${typeBadge}${escapeHtml(s.name)}</div>
+              <button class="btn btn-sm btn-ghost" style="padding:2px 6px;color:var(--text-muted);" onclick="event.stopPropagation();deleteSession(${s.id})">✕</button>
+            </div>
+            <div class="session-meta">${s.msg_count || 0}条 ${modelBadge} · ${new Date(s.updated_at).toLocaleTimeString()}</div>
+          </div>
+        `);
+      }
+    }
+
+    async function selectSession(id) {
+      currentSessionId = id;
+      localStorage.setItem(STORAGE_KEY, id.toString());
+      renderSessionList();
+      const s = sessions.find(x => x.id === id);
+      if (s && s.model_id && allModels.length) {
+        const sel = document.getElementById('model-select');
+        sel.value = s.model_id;
+      }
+      try {
+        messages = await fetchMessages(id);
+      } catch (e) { messages = []; toast('加载历史失败: ' + e.message, 'error'); }
+      renderChat();
+    }
+
+    async function fetchMessages(sessionId) {
+      const res = await fetch('/api/history/' + sessionId);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
+
+    async function createNewSession() {
+      // 先拿模型列表
+      let models = [];
+      try { models = await API.models(); } catch (e) { models = []; }
+      if (!models.length) {
+        toast('没有可用模型，请先创建模型', 'error');
+        return;
+      }
+
+      // 简单的弹框方案
+      const type = currentSessTab; // 用当前 tab 决定默认类型
+      const name = prompt(
+        type === 'train' ? '训练会话名称' : '聊天会话名称',
+        `${type === 'train' ? '训练' : '聊天'} ${new Date().toLocaleTimeString()}`
+      );
+      if (!name) return;
+
+      // 如果只有一个模型直接用，多个让用户选
+      let modelId = models[0].id;
+      if (models.length > 1) {
+        const labels = models.map((m, i) => `${i + 1}. ${m.name} (${m.weight_count || 0} 权重)`).join('\n');
+        const choice = prompt(`选择模型 (输入序号):\n${labels}\n\n默认 1 (${models[0].name})`, '1');
+        const idx = parseInt(choice) - 1;
+        if (idx >= 0 && idx < models.length) modelId = models[idx].id;
+      }
+
+      try {
+        const sess = await API.createSession({ name, type, model_id: modelId });
+        sessions.push(sess);
+        // 切到对应 tab 并选中新会话
+        if ((sess.type || 'chat') !== currentSessTab) {
+          switchSessTab(sess.type || 'chat');
+        }
+        await selectSession(sess.id);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteSession(id) {
+      if (!confirm('删除此会话？')) return;
+      try {
+        await API.deleteSession(id);
+        sessions = sessions.filter(s => s.id !== id);
+        if (currentSessionId === id) {
+          currentSessionId = null;
+          localStorage.removeItem(STORAGE_KEY);
+        }
+        await loadSessions();
+        if (sessions.length > 0) await selectSession(sessions[0].id);
+        else renderChatEmpty();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function renderChat() {
+      const app = document.getElementById('chat-app');
+      app.innerHTML = `
+        <div class="messages-container" id="messages"></div>
+        <div class="chat-input-area">
+          <div class="input-wrapper">
+            <textarea id="msg-input" class="textarea" placeholder="输入消息... (试试 /help)" rows="1" ${isStreaming ? 'disabled' : ''}></textarea>
+            ${isStreaming
+              ? `<button class="btn btn-danger" onclick="forceStop()">⏹️ 停止</button>`
+              : `<button class="btn btn-primary" onclick="sendMessage()">发送</button>`
+            }
+          </div>
+        </div>
+      `;
+      const container = document.getElementById('messages');
+      if (messages.length === 0) {
+        container.innerHTML = `
+          <div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+            <div style="font-size:48px;margin-bottom:12px;">💬</div>
+            <div>开始对话吧！试试输入 "你好" 或 /help</div>
+          </div>
+        `;
+      } else {
+        for (const m of messages) {
+          container.appendChild(createMsgEl(m));
+        }
+      }
+      setupInput();
+      scrollToBottom();
+    }
+
+    function renderChatEmpty() {
+      const app = document.getElementById('chat-app');
+      app.innerHTML = `
+        <div class="messages-container" id="messages" style="display:flex;align-items:center;justify-content:center;">
+          <div style="text-align:center;color:var(--text-muted);">
+            <div style="font-size:64px;margin-bottom:16px;">👋</div>
+            <div>创建一个新会话开始对话</div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <div class="input-wrapper">
+            <textarea id="msg-input" class="textarea" placeholder="请先创建会话" rows="1" disabled></textarea>
+            <button class="btn btn-primary" disabled>发送</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function scrollToBottom() {
+      const c = document.getElementById('messages');
+      if (c) c.scrollTop = c.scrollHeight;
+    }
+
+    function createMsgEl(m) {
+      const div = document.createElement('div');
+      div.className = `message ${m.role === 'user' ? 'user' : 'bot'}`;
+      const safeContent = escapeHtml(m.content || '');
+      const hasThinking = m.thinking && m.thinking.trim();
+
+      let thinkingHtml = '';
+      let actionsHtml = '';
+      let bubbleRowOpen = '';
+      let bubbleRowClose = '';
+
+      if (m.role === 'assistant') {
+        bubbleRowOpen = '<div class="bubble-row">';
+        bubbleRowClose = '</div>';
+        thinkingHtml = `
+          <details class="thinking-block" data-thinking-id="${m.id}">
+            <summary>🧠 思考过程 ${hasThinking ? '(展开)' : '(点击添加)'}</summary>
+            <textarea class="thinking-edit" placeholder="记录 AI 的思考过程、推理步骤...">${escapeHtml(m.thinking || '')}</textarea>
+            <div class="thinking-actions">
+              <button class="btn btn-sm btn-primary" onclick="saveThinking(${m.id}, this)">💾 保存</button>
+              <button class="btn btn-sm" onclick="clearThinking(${m.id})">🗑️ 清空</button>
+            </div>
+          </details>
+        `;
+        actionsHtml = `
+          <div class="bubble-actions">
+            <button class="btn btn-sm btn-ghost" onclick="copyMessage(this)" title="复制">📋</button>
+            <button class="btn btn-sm btn-ghost" onclick="regenerateMsg(${m.id})" title="重新生成">🔄</button>
+            <button class="btn btn-sm btn-ghost" onclick="startEditMsg(this)" title="修正训练">✏️</button>
+            <button class="btn btn-sm btn-ghost" onclick="learnTurn(${m.id})" title="把这轮对话训练进模型">🧠 学习</button>
+          </div>
+        `;
+      } else {
+        actionsHtml = `
+          <div class="bubble-actions">
+            <button class="btn btn-sm btn-ghost" onclick="copyMessage(this)" title="复制">📋 复制</button>
+            <button class="btn btn-sm btn-ghost" onclick="editUserMsg(${m.id})" title="编辑">✏️</button>
+          </div>
+        `;
+      }
+
+      div.innerHTML = `
+        <div class="avatar">${m.role === 'user' ? '👤' : '🤖'}</div>
+        <div class="msg-body" style="flex:1;max-width:68%;">
+          ${bubbleRowOpen}
+          <div class="bubble" data-content-id="${m.id}">${safeContent}</div>
+          ${actionsHtml}
+          ${bubbleRowClose}
+          ${thinkingHtml}
+        </div>
+      `;
+      return div;
+    }
+
+    // ===== 消息操作 =====
+    function copyMessage(btn) {
+      const bubble = btn.closest('.message').querySelector('.bubble');
+      const text = bubble.textContent;
+      navigator.clipboard.writeText(text).then(() => toast('✅ 已复制到剪贴板', 'success'));
+    }
+
+    async function regenerateMsg(msgId) {
+      if (!confirm('删除此回复并重新生成？')) return;
+      try {
+        await fetch(`/api/history/message/${msgId}`, { method: 'DELETE' });
+      } catch(e) {}
+      // 直接用已有 regenerate 接口
+      try {
+        const res = await API.chatRegenerate(currentSessionId);
+        messages = await fetchMessages(currentSessionId);
+        renderChat();
+        toast('🔄 已重新生成', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    let _editMsgCache = '';
+    function startEditMsg(btn) {
+      const bubble = btn.closest('.message.bot').querySelector('.bubble');
+      bubble.contentEditable = 'true';
+      bubble.focus();
+      bubble.style.outline = '2px solid var(--accent)';
+      bubble.style.background = 'var(--user-msg-bg)';
+
+      const divs = [...document.querySelectorAll('.message')];
+      const botIdx = divs.indexOf(btn.closest('.message.bot'));
+      _editMsgCache = '';
+      for (let i = botIdx - 1; i >= 0; i--) {
+        if (divs[i].classList.contains('user')) {
+          _editMsgCache = divs[i].querySelector('.bubble').textContent;
+          break;
+        }
+      }
+
+      // 替换按钮为"保存/取消"
+      const actions = btn.closest('.bubble-actions');
+      actions.innerHTML = `
+        <button class="btn btn-sm btn-primary" onclick="submitEdit(this)">✅ 提交训练</button>
+        <button class="btn btn-sm" onclick="cancelEdit(this)">取消</button>
+      `;
+    }
+
+    async function submitEdit(btn) {
+      const actions = btn.closest('.bubble-actions');
+      const bubble = actions.closest('.message.bot').querySelector('.bubble');
+      const output = bubble.textContent;
+      const input = _editMsgCache;
+      if (!input || !output) return toast('输入或输出为空', 'error');
+
+      try {
+        const res = await API.train(input, output);
+        toast(`✅ 训练完成: +${res.weightChanges} 权重`, 'success');
+
+        // 同时保存修改后的内容到数据库
+        const msgId = bubble.getAttribute('data-content-id');
+        if (msgId) {
+          await fetch(`/api/history/message/${msgId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: output }),
+          });
+        }
+
+        bubble.contentEditable = 'false';
+        bubble.style.outline = 'none';
+        bubble.style.background = '';
+        // 重新从服务器拉取最新数据（包含刚修正的内容）
+        messages = await fetchMessages(currentSessionId);
+        renderChat();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function cancelEdit(btn) {
+      const actions = btn.closest('.bubble-actions');
+      const bubble = actions.closest('.message.bot').querySelector('.bubble');
+      bubble.contentEditable = 'false';
+      bubble.style.outline = 'none';
+      bubble.style.background = '';
+      renderChat();
+    }
+
+    // ===== Thinking 保存 =====
+    async function saveThinking(msgId, btn) {
+      const block = btn.closest('.thinking-block');
+      const textarea = block.querySelector('.thinking-edit');
+      const thinking = textarea.value;
+      try {
+        await fetch(`/api/history/message/${msgId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thinking }),
+        });
+        // 同步更新内存数组
+        const msg = messages.find(m => m.id === msgId);
+        if (msg) msg.thinking = thinking;
+        toast('💾 思考过程已保存', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function clearThinking(msgId) {
+      try {
+        await fetch(`/api/history/message/${msgId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thinking: '' }),
+        });
+        toast('🗑️ 已清空', 'info');
+        renderChat();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // 把一轮对话(user → 当前 assistant) 训练进当前会话绑定的模型
+    async function learnTurn(assistantMsgId) {
+      const idx = messages.findIndex(m => m.id === assistantMsgId);
+      if (idx <= 0) { toast('找不到对应的 user 消息', 'error'); return; }
+      const userMsg = messages[idx - 1];
+      const botMsg = messages[idx];
+      if (userMsg.role !== 'user') { toast('前一条不是 user 消息', 'error'); return; }
+
+      // 找当前会话绑定的模型
+      const s = sessions.find(x => x.id === currentSessionId);
+      if (!s || !s.model_id) { toast('当前会话未绑定模型', 'error'); return; }
+
+      const repeats = 4;
+      try {
+        // 训练 reply pair
+        let trained = await fetch(`/api/models/${s.model_id}/train-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pairs: Array(repeats).fill({ input: userMsg.content, output: botMsg.content }),
+            model_dir: s.model_dir || undefined
+          }),
+        }).then(r => r.json());
+
+        // 如果有 thinking，也训练 think|前缀
+        // 优先读 DOM 里 textarea 最新值（用户编辑过没点保存也能学到）
+        let currentThinking = botMsg.thinking || '';
+        try {
+          const ta = document.querySelector('.thinking-block[data-thinking-id="' + assistantMsgId + '"] textarea.thinking-edit');
+          if (ta && ta.value.trim()) currentThinking = ta.value.trim();
+        } catch(e) {}
+        if (currentThinking.trim()) {
+          await fetch(`/api/models/${s.model_id}/train-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pairs: Array(3).fill({ input: 'think|' + userMsg.content, output: currentThinking }),
+              model_dir: s.model_dir || undefined
+            }),
+          });
+        }
+
+        toast(`✅ 已训练 ${repeats} 次 × reply + ${botMsg.thinking ? 3 + ' × thinking' : ''}`, 'success');
+        await loadModelSelect(); // 更新权重数
+      } catch (e) { toast('训练失败: ' + e.message, 'error'); }
+    }
+
+    async function editUserMsg(msgId) {
+      const msg = messages.find(m => m.id === msgId);
+      if (!msg) return;
+      const newText = prompt('编辑这条 user 消息：', msg.content);
+      if (newText === null || newText.trim() === msg.content.trim()) return;
+      try {
+        await fetch(`/api/history/message/${msgId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: newText.trim() }),
+        });
+        messages = await fetchMessages(currentSessionId);
+        renderChat();
+        toast('✅ 已更新', 'success');
+      } catch (e) { toast('更新失败: ' + e.message, 'error'); }
+    }
+
+    // ===== 输入 =====
+    function setupInput() {
+      const input = document.getElementById('msg-input');
+      if (!input) return;
+      input.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+      });
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+      input.focus();
+    }
+
+    function escapeHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    // ===== 发送 =====
+    async function sendMessage() {
+      if (isStreaming || !currentSessionId) return;
+      const input = document.getElementById('msg-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      input.style.height = 'auto';
+
+      isStreaming = true;
+      messages.push({ role: 'user', content: text });
+      renderChat();
+
+      // Bot 指令：非流式
+      if (text.startsWith('/')) {
+        try {
+          const res = await API.chat(text, currentSessionId);
+          messages = await fetchMessages(currentSessionId);
+          renderChat();
+          toast('指令执行完成', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+        isStreaming = false;
+        return;
+      }
+
+      // SSE 流式生成
+      try {
+        const container = document.getElementById('messages');
+        const botMsg = { role: 'assistant', content: '' };
+        messages.push(botMsg);
+        renderChat();
+
+        const bubbles = document.querySelectorAll('.message.bot .bubble');
+        const bubble = bubbles[bubbles.length - 1];
+        bubble.classList.add('typing');
+
+        // 两阶段 UI 容器 — 先创建好 thinking 面板
+        const botMsgWrap = bubble.closest('.message.bot .msg-body');
+        const bubbleRow = bubble.closest('.bubble-row');
+        let thinkBlock = document.createElement('details');
+        thinkBlock.className = 'thinking-block';
+        thinkBlock.open = true;
+        thinkBlock.innerHTML = '<summary>🧠 思考中...</summary><div class="thinking-content" style="white-space:pre-wrap;"></div>';
+        botMsgWrap.insertBefore(thinkBlock, bubbleRow);
+        const thinkContent = thinkBlock.querySelector('.thinking-content');
+        let thinkingText = '';
+        let phase = 'idle'; // idle → thinking → reply → done
+
+        fetchAbortController = new AbortController();
+        const resp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, sessionId: currentSessionId }),
+          signal: fetchAbortController.signal,
+        });
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              currentEvent = line.substring(6).trim();
+            } else if (line.startsWith('data:')) {
+              const d = line.substring(5);
+              if (currentEvent === 'start') { try { currentGenId = JSON.parse(d).genId; } catch(e) {} currentEvent = null; }
+              else if (currentEvent === 'thinking_start') {
+                phase = 'thinking';
+                thinkBlock.open = true;
+                currentEvent = null;
+              } else if (currentEvent === 'thinking_token') {
+                thinkingText += d;
+                thinkContent.textContent = thinkingText;
+                scrollToBottom();
+                currentEvent = null;
+              } else if (currentEvent === 'thinking_done') {
+                phase = 'think_done';
+                thinkBlock.querySelector('summary').textContent = '🧠 思考过程 (折叠)';
+                thinkBlock.open = false;
+                currentEvent = null;
+              } else if (currentEvent === 'reply_start') {
+                phase = 'reply';
+                bubble.classList.remove('typing');
+                bubble.textContent = '';
+                currentEvent = null;
+              } else if (currentEvent === 'done') {
+                phase = 'done';
+                currentEvent = null;
+              } else if (currentEvent === 'error') {
+                bubble.textContent = '❌ ' + d;
+                bubble.classList.remove('typing');
+                currentEvent = null;
+              } else {
+                // 无 event 前缀 = 普通回复 token
+                if (phase === 'reply' || phase === 'think_done' || phase === 'idle') {
+                  bubble.textContent += d;
+                  botMsg.content = bubble.textContent;
+                  scrollToBottom();
+                }
+              }
+            }
+          }
+        }
+
+        bubble.classList.remove('typing');
+        currentGenId = null;
+        isStreaming = false;
+        messages = await fetchMessages(currentSessionId);
+        renderChat();
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          toast('⏹️ 已停止生成', 'info');
+        } else {
+          toast(err.message, 'error');
+        }
+        currentGenId = null;
+        isStreaming = false;
+        try {
+          messages = await fetchMessages(currentSessionId);
+          renderChat();
+        } catch(e) {}
+      }
+    }
+
+    async function forceStop() {
+      if (fetchAbortController) {
+        fetchAbortController.abort();
+        fetchAbortController = null;
+      }
+      if (currentGenId) {
+        try {
+          await fetch('/api/chat/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ genId: currentGenId }),
+          });
+        } catch(e) {}
+      }
+      isStreaming = false;
+      currentGenId = null;
+    }
+
+    async function regenerateReply() {
+      if (!currentSessionId || isStreaming) return;
+      try {
+        const res = await API.chatRegenerate(currentSessionId);
+        messages = await fetchMessages(currentSessionId);
+        renderChat();
+        toast('已重新生成', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ===== 模型导入导出 =====
+    function exportModel() {
+      window.location.href = '/api/models';
+      toast('📦 开始下载模型...', 'info');
+    }
+
+    async function importModel(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          const res = await API.importModel(data);
+          toast(`✅ 导入完成: 权重${res.imported?.weights || 0}, 语料${res.imported?.corpus || 0}`, 'success');
+          await loadSessions();
+          if (currentSessionId) {
+            messages = await fetchMessages(currentSessionId);
+            renderChat();
+          }
+        } catch (err) {
+          toast('导入失败: ' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function showHelp() {
+      toast('/help 帮助  /save 保存  /reset 重置\n/stats 统计  /search 关键词\n/weights 关键词  /snapshots 列表\n/rollback 回滚  /config 配置', 'info', 6000);
+    }
+
+    // 启动
+    init();
+  </script>
+</body>
+</html>
+
+
+
+
+
+

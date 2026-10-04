@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>GUI</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#040a14;color:#c0c0c0;font-family:'Cascadia Code',monospace;font-size:13px;padding:12px}
+h2{color:#8be9fd;margin-bottom:10px;font-size:15px}
+.row{display:flex;gap:10px;margin-bottom:8px;align-items:center}
+label{color:#6272a4;width:80px;flex-shrink:0}
+select,input,button{background:#111;border:1px solid #222;color:#e0e0e0;padding:5px 10px;border-radius:3px;font-family:inherit;font-size:12px}
+button{background:#1a1a2e;border-color:#334;color:#8be9fd;cursor:pointer}
+button:hover{background:#222}
+button.primary{background:#1a3a2a;border-color:#2a5;color:#50fa7b}
+button.primary:hover{background:#1a4a2a}
+button.danger{background:#3a1515;border-color:#522;color:#ff5555}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th{text-align:left;color:#8be9fd;padding:6px 10px;border-bottom:1px solid #222;font-size:11px}
+td{padding:5px 10px;border-bottom:1px solid #111;font-size:12px}
+tr:hover td{background:#0a0a1a}
+.tag{display:inline-block;padding:1px 6px;border-radius:2px;font-size:10px;background:#1a1a2e;color:#6272a4}
+.tag.locked{background:#3a1515;color:#ff5555}
+.tag.mine{background:#153a15;color:#50fa7b}
+#msg{color:#6272a4;font-size:11px;margin-top:10px}
+</style>
+</head>
+<body>
+<h2>🖥 GUI 管理面板</h2>
+<div class="row">
+  <label>模型:</label>
+  <select id="sel-model"></select>
+  <button onclick="doTrain()" class="primary">训练</button>
+</div>
+<div class="row">
+  <label>会话:</label>
+  <select id="sel-session" onchange="switchSession()"></select>
+  <button onclick="newSession()">+新建</button>
+  <button onclick="lockSession()" id="btn-lock">锁定</button>
+</div>
+<div class="row">
+  <label>训练输入:</label>
+  <input id="train-in" style="flex:1" placeholder="用户输入...">
+</div>
+<div class="row">
+  <label>训练输出:</label>
+  <input id="train-out" style="flex:1" placeholder="期望输出...">
+</div>
+<button onclick="doTrain()" class="primary" style="margin-top:6px">▶ 开始训练</button>
+<div id="msg">选择会话和模型后训练</div>
+<table id="sess-table">
+  <thead><tr><th>ID</th><th>名称</th><th>模型</th><th>消息数</th><th>状态</th><th>操作</th></tr></thead>
+  <tbody id="sess-tbody"></tbody>
+</table>
+<script>
+let models=[],sessions=[],mySid=null,myMid=null,username='user';
+async function api(p,b){const r=await fetch(p,{method:b?.method||'GET',headers:{'Content-Type':'application/json'},credentials:'include',body:b?.bd?JSON.stringify(b.bd):undefined});return r.json()}
+async function load(){
+  try{models=await api('/api/models');document.getElementById('sel-model').innerHTML=models.map(m=>'<option value="'+m.id+'">'+(m.name||m.id)+'</option>').join('')}catch(e){}
+  try{sessions=await api('/api/sessions');renderSess();syncSelect()}catch(e){}
+}
+function syncSelect(){
+  const s=document.getElementById('sel-session');
+  s.innerHTML=sessions.map(x=>'<option value="'+x.id+'">'+(x.name||x.id)+'</option>').join('');
+  if(mySid){const o=s.options[0];for(const opt of s.options)if(+opt.value===mySid){opt.selected=true;break}}
+}
+function renderSess(){
+  const tb=document.getElementById('sess-tbody');tb.innerHTML='';
+  for(const s of sessions){
+    const tr=document.createElement('tr');
+    const locked=s.locked?'<span class="tag locked">LOCKED</span>':'<span class="tag">OK</span>';
+    const mine=s.locked_by===username?'<span class="tag mine">mine</span>':'';
+    tr.innerHTML='<td>'+s.id+'</td><td>'+((s.name||'').slice(0,15))+'</td><td>'+s.model_name+'</td><td>'+(s.msg_count||0)+'</td><td>'+locked+mine+'</td><td><button onclick="doSwitch('+s.id+')">切入</button></td>';
+    tb.appendChild(tr);
+  }
+}
+async function doSwitch(id){mySid=id;syncSelect();document.getElementById('msg').textContent='已切换到会话 '+id}
+async function newSession(){try{const n=await api('/api/sessions',{method:'POST',bd:{name:'新会话 '+Date.now().toString(36).slice(-4),type:'chat',model_id:myMid||'default'}});await load();document.getElementById('msg').textContent='已创建 '+n.id}catch(e){document.getElementById('msg').textContent='错误: '+e.message}}
+async function doTrain(){
+  const inp=document.getElementById('train-in').value.trim();
+  const out=document.getElementById('train-out').value.trim();
+  if(!inp||!out)return document.getElementById('msg').textContent='请填写输入和输出';
+  try{
+    await api('/api/models/'+(myMid||'default')+'/train-batch',{method:'POST',bd:{pairs:[{input:inp,output:out},{input:inp,output:out},{input:inp,output:out},{input:inp,output:out}]}});
+    document.getElementById('msg').textContent='训练完成 (+4 pairs)';
+  }catch(e){document.getElementById('msg').textContent='训练失败: '+e.message}
+}
+async function lockSession(){
+  if(!mySid)return document.getElementById('msg').textContent='请先选择会话';
+  try{
+    await api('/api/sessions/'+mySid+'/lock',{method:'POST',bd:{locked_by:username}});
+    await load();
+    document.getElementById('msg').textContent='会话已锁定 ('+username+')';
+  }catch(e){document.getElementById('msg').textContent='锁定失败: '+e.message}
+}
+load();
+</script>
+</body>
+</html>

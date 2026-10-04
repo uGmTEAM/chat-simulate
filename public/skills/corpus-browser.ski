@@ -1,0 +1,12 @@
+{
+  "name": "corpus-browser",
+  "version": "1.0.0",
+  "description": "语料库浏览器 — 搜索和查看训练语料",
+  "author": "chat-simulate",
+  "tags": ["corpus", "search", "train"],
+  "commands": ["corpus", "cbrowse"],
+  "capabilities": ["corpus-browsing"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/corpus-browser.html"
+}

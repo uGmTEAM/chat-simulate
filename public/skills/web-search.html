@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',sans-serif;padding:16px;font-size:13px}
+  h2{color:#8be9fd;margin-bottom:12px;font-size:15px}
+  .row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  input,select,textarea{background:#141a2a;border:1px solid #2a3a5a;color:#c8d6e5;padding:6px 10px;border-radius:4px;font-size:13px;width:100%;font-family:inherit}
+  input:focus,textarea:focus{outline:none;border-color:#8be9fd}
+  textarea{resize:vertical;min-height:80px}
+  button{background:#1a6dd4;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit}
+  button:hover{background:#2580f0}
+  button.secondary{background:#2a3a5a}
+  button.secondary:hover{background:#3a4a6a}
+  .result{background:#0d1520;border:1px solid #1e2d4a;border-radius:4px;padding:10px;margin-top:10px;max-height:300px;overflow-y:auto;font-size:12px;white-space:pre-wrap;word-break:break-all}
+  .tag{display:inline-block;background:#1a2a4a;padding:2px 8px;border-radius:10px;font-size:11px;color:#8be9fd;margin-right:4px}
+  .hint{color:#5a6a8a;font-size:11px;margin-top:4px}
+</style>
+</head>
+<body>
+<h2>🔍 联网搜索</h2>
+<div class="row">
+  <input id="q" placeholder="输入搜索关键词..." onkeydown="if(event.key==='Enter')doSearch()">
+  <button onclick="doSearch()">搜索</button>
+</div>
+<div class="hint">使用 Bing 公开搜索接口，无需 API Key</div>
+<div id="out" class="result" style="display:none"></div>
+
+<script>
+const OUT=document.getElementById('out'),Q=document.getElementById('q');
+async function doSearch(){
+  const q=Q.value.trim();if(!q)return;
+  OUT.style.display='block';OUT.textContent='搜索中...';
+  try{
+    const r=await fetch('/api/web-search?q='+encodeURIComponent(q),{credentials:'include'});
+    const j=await r.json();
+    if(j.error){OUT.textContent='错误: '+j.error;return}
+    const items=(j.results||[]).slice(0,10);
+    if(!items.length){OUT.textContent='未找到相关结果';return}
+    OUT.textContent=items.map((it,i)=>
+      (i+1)+'. '+it.title+'\n   '+it.url+'\n   '+it.snippet
+    ).join('\n\n');
+  }catch(e){OUT.textContent='请求失败: '+e.message}
+}
+</script>
+</body>
+</html>

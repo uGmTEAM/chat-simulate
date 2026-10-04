@@ -1,0 +1,12 @@
+{
+  "name": "account-mgr",
+  "version": "1.0.0",
+  "description": "账号管理 — 列表/创建/删除/锁定账号（Admin only）",
+  "author": "chat-simulate",
+  "tags": ["account", "admin", "auth"],
+  "commands": ["account", "amgr"],
+  "capabilities": ["account-management"],
+  "requiresAuth": true,
+  "html": "",
+  "htmlFile": "skills/account-mgr.html"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "stats-dashboard",
+  "version": "1.0.0",
+  "description": "统计面板 — 会话/消息/训练/数据库总览",
+  "author": "chat-simulate",
+  "tags": ["stats", "dashboard", "monitor"],
+  "commands": ["stats", "dashboard", "stat"],
+  "capabilities": ["statistics"],
+  "requiresAuth": false,
+  "html": "",
+  "htmlFile": "skills/stats-dashboard.html"
+}

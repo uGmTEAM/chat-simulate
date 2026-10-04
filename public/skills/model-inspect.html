@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e17;color:#c8d6e5;font-family:'Segoe UI',sans-serif;padding:16px;font-size:13px}
+  h2{color:#8be9fd;margin-bottom:12px;font-size:15px}
+  .row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  input,select,textarea{background:#141a2a;border:1px solid #2a3a5a;color:#c8d6e5;padding:6px 10px;border-radius:4px;font-size:13px;width:100%;font-family:inherit}
+  input:focus,textarea:focus{outline:none;border-color:#8be9fd}
+  button{background:#1a6dd4;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;font-family:inherit}
+  button:hover{background:#2580f0}
+  button.secondary{background:#2a3a5a}
+  button.secondary:hover{background:#3a4a6a}
+  .panel{background:#0d1520;border:1px solid #1e2d4a;border-radius:6px;padding:12px;margin-bottom:12px}
+  .panel h3{color:#50fa7b;font-size:12px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;color:#8be9fd;padding:4px 8px;border-bottom:1px solid #1e2d4a;font-size:11px}
+  td{padding:4px 8px;border-bottom:1px solid #0d1520;color:#c8d6e5}
+  tr:hover td{background:#0d1a2a}
+  .tag{display:inline-block;background:#1a2a4a;padding:1px 6px;border-radius:8px;font-size:10px;color:#8be9fd;margin-right:3px}
+  .tag.layer{background:#1a3a2a;color:#50fa7b}
+  .result{background:#0d1520;border:1px solid #1e2d4a;border-radius:4px;padding:10px;margin-top:8px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto}
+  .hint{color:#5a6a8a;font-size:11px;margin-top:4px}
+  .stat-row{display:flex;gap:16px;margin-bottom:8px}
+  .stat-item{flex:1;background:#0d1520;border:1px solid #1e2d4a;border-radius:4px;padding:8px 12px}
+  .stat-item .val{color:#8be9fd;font-size:20px;font-weight:bold}
+  .stat-item .lbl{color:#5a6a8a;font-size:10px;margin-top:2px}
+  #test-out{min-height:40px}
+</style>
+</head>
+<body>
+<h2>🔬 模型详情</h2>
+
+<div class="panel">
+  <h3>选择模型</h3>
+  <div class="row">
+    <select id="model-sel" style="flex:1"><option value="">加载中...</option></select>
+    <button onclick="loadModel()">加载</button>
+  </div>
+</div>
+
+<div id="info-panel" class="panel" style="display:none">
+  <h3>基本信息</h3>
+  <div class="stat-row" id="info-stats"></div>
+  <div id="config-info" class="hint" style="margin-top:6px"></div>
+</div>
+
+<div id="layer-panel" class="panel" style="display:none">
+  <h3>权重分布（按 Layer）</h3>
+  <table id="layer-table">
+    <thead><tr><th>Layer</th><th>Entries</th><th>Total Weight</th><th>Avg Weight</th></tr></thead>
+    <tbody id="layer-tbody"></tbody>
+  </table>
+</div>
+
+<div id="top-panel" class="panel" style="display:none">
+  <h3>Top 20 Token</h3>
+  <table>
+    <thead><tr><th>#</th><th>Token</th><th>Layer</th><th>Count</th><th>Weight</th></tr></thead>
+    <tbody id="top-tbody"></tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h3>在线测试</h3>
+  <div class="row">
+    <input id="test-in" placeholder="输入测试文本..." onkeydown="if(event.key==='Enter')doTest()">
+    <button onclick="doTest()">测试</button>
+  </div>
+  <div id="test-out" class="result" style="display:none"></div>
+</div>
+
+<script>
+const SEL=document.getElementById('model-sel'),INFO_P=document.getElementById('info-panel'),LAYER_P=document.getElementById('layer-panel'),TOP_P=document.getElementById('top-panel'),TEST_OUT=document.getElementById('test-out');
+let currentMid=null;
+async function api(p,b){const r=await fetch(p,{method:b?.method||'GET',headers:{'Content-Type':'application/json'},credentials:'include',body:b?.bd?JSON.stringify(b.bd):undefined});return r.json()}
+
+async function load(){
+  try{
+    const models=await api('/api/models');
+    SEL.innerHTML=models.map(m=>'<option value="'+m.id+'">'+(m.name||m.id)+' ['+(m.weight_count||0)+']</option>').join('');
+    if(models.length)loadModel();
+  }catch(e){SEL.innerHTML='<option>加载失败</option>'}
+}
+
+async function loadModel(){
+  currentMid=SEL.value;if(!currentMid)return;
+  try{
+    const m=await api('/api/models/'+currentMid);
+    INFO_P.style.display='block';
+    LAYER_P.style.display='block';
+    TOP_P.style.display='block';
+    document.getElementById('info-stats').innerHTML=[
+      {v:m.weight_count||0,l:'权重条目'},
+      {v:m.weight_total_count||0,l:'总权重和'},
+      {v:(m.config?.temperature!=null?m.config.temperature:'—'),l:'温度'},
+      {v:(m.config?.ngramSize!=null?m.config.ngramSize:'—'),l:'N-gram'}
+    ].map(x=>'<div class="stat-item"><div class="val">'+x.v+'</div><div class="lbl">'+x.l+'</div></div>').join('');
+    document.getElementById('config-info').textContent='描述: '+(m.description||'无');
+
+    const wt=m.weight_list||[];
+    const byLayer={};
+    for(const t of wt){const l=t.layer||'?';if(!byLayer[l])byLayer[l]={count:0,total:0};byLayer[l].count++;byLayer[l].total+=t.weight}
+    const lt=document.getElementById('layer-tbody');
+    lt.innerHTML=Object.entries(byLayer).sort((a,b)=>b[1].count-a[1].count).map(([l,d])=>
+      '<tr><td><span class="tag layer">'+l+'</span></td><td>'+d.count+'</td><td>'+d.total.toFixed(2)+'</td><td>'+(d.total/d.count).toFixed(4)+'</td></tr>'
+    ).join('');
+
+    const top=wt.slice(0,20);
+    document.getElementById('top-tbody').innerHTML=top.map((t,i)=>
+      '<tr><td>'+(i+1)+'</td><td style="font-family:monospace">'+esc(t.token||'')+'</td><td><span class="tag">'+t.layer+'</span></td><td>'+t.count+'</td><td>'+t.weight.toFixed(4)+'</td></tr>'
+    ).join('');
+  }catch(e){
+    INFO_P.style.display='none';LAYER_P.style.display='none';TOP_P.style.display='none';
+  }
+}
+
+async function doTest(){
+  const inp=document.getElementById('test-in').value.trim();
+  if(!inp)return;
+  TEST_OUT.style.display='block';TEST_OUT.textContent='生成中...';
+  try{
+    const r=await api('/api/models/'+currentMid+'/test?input='+encodeURIComponent(inp));
+    TEST_OUT.textContent='输入: '+inp+'\n精确匹配: '+(r.exact_match||'(无)')+'\n权重: '+r.stats?.total+' entries';
+  }catch(e){TEST_OUT.textContent='测试失败: '+e.message}
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terminal Chat Simulate</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#040a14;overflow:hidden;font-family:'Cascadia Code','JetBrains Mono','Fira Code','Consolas','Menlo','Monaco','Roboto Mono','Source Code Pro','Noto Sans Mono CJK SC','Sarasa Mono SC',monospace;font-size:14px;color:#c0c0c0}
+#t{width:100%;height:100%;display:flex;flex-direction:column;padding:4px 8px 0}
+#tp{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-bottom:1px}
+#tp-l{color:#8be9fd}
+#tp-l .c{display:inline-block;width:7px;height:13px;background:#8be9fd;vertical-align:-2px;margin-left:3px;animation:b 1s steps(1) infinite}
+#tp-r{color:#6272a4;font-variant-numeric:tabular-nums}
+@keyframes b{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+#o{flex:1;overflow-y:auto;overflow-x:hidden;line-height:1.32;white-space:pre-wrap;word-break:break-word;padding-right:6px}
+#o::-webkit-scrollbar{width:5px}
+#o::-webkit-scrollbar-thumb{background:#222;border-radius:2px}
+.tc{display:inline-block;width:7px;height:1em;background:#8be9fd;vertical-align:text-bottom;animation:b 1s steps(1) infinite;margin-left:2px}
+.ll{display:flex;align-items:baseline;gap:6px;margin:0}
+.lt{flex-shrink:0;font-weight:700;white-space:pre}
+.ltx{flex:1;min-width:0}
+.ul{display:flex;gap:5px;margin:0}
+.ul .p{color:#50fa7b;font-weight:700;flex-shrink:0}
+.ul .t{color:#e0e0e0}
+.tb{margin:1px 0 1px 14px;padding-left:5px;border-left:1px solid #2a2a2a;opacity:.7;}
+.tb .tl{color:#444;font-weight:700}
+.tb .tx{color:#7a7a7a}
+.rb{margin:0}
+#ia{display:flex;align-items:center;gap:5px;flex-shrink:0;padding-top:2px}
+#ia .p{color:#50fa7b;font-weight:700;flex-shrink:0;white-space:nowrap}
+#ia input{flex:1;background:transparent;border:none;outline:none;color:#e0e0e0;font-family:inherit;font-size:inherit;caret-color:#8be9fd}
+#ia input::placeholder{color:#333}
+
+/* GUI 模式 */
+.gb{display:none;gap:6px;flex-wrap:wrap;padding:4px 8px;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:3px;margin-bottom:6px}
+.gb.on{display:flex}
+.gbtn{background:#111;border:1px solid #222;color:#8be9fd;padding:4px 10px;font-family:inherit;font-size:11px;border-radius:2px;cursor:pointer;transition:.12s}
+.gbtn:hover{background:#181818;border-color:#444;color:#fff}
+.gbtn.p{background:#334155;border-color:transparent;color:#fff}
+.gbtn.d{color:#ff5555;border-color:#3a1515}
+.gbtn.d:hover{background:#180808;border-color:#ff5555}
+.gbtn.s{color:#50fa7b;border-color:#153a15}
+.gbtn.s:hover{background:#081808;border-color:#50fa7b}
+.gsel{background:#111;border:1px solid #222;color:#c0c0c0;padding:3px 6px;font-family:inherit;font-size:11px;border-radius:2px}
+.glb{color:#444;font-size:10px;padding-right:2px}
+
+/* 登录页 Debian 风格 */
+#lg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:#040a14;z-index:99}
+#lg .lb{white-space:pre;color:#c0c0c0;line-height:1.5;font-size:14px;font-family:inherit;text-align:left}
+#lg .lb .h{color:#8be9fd}
+#lg .lb .u{color:#50fa7b}
+#lg .lb input{background:transparent;border:none;outline:none;color:#e0e0e0;font-family:inherit;font-size:inherit;caret-color:#8be9fd;width:180px;padding:0;margin:0}
+
+@media(max-width:600px){#t{padding:2px 4px}html,body{font-size:13px}#sb{display:flex!important}}
+
+/* Skill 覆盖层 */
+#skill-overlay{position:absolute;inset:0;display:none;flex-direction:column;background:#040a14;z-index:50}
+#skill-overlay.on{display:flex}
+#skill-bar{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#0a0a0a;border-bottom:1px solid #1a1a1a;flex-shrink:0}
+#skill-name{color:#8be9fd;font-size:12px;flex:1}
+#skill-close{background:#111;border:1px solid #ff5555;color:#ff5555;padding:2px 8px;font-family:inherit;font-size:11px;border-radius:2px;cursor:pointer}
+#skill-close:hover{background:#180808}
+#skill-frame{flex:1;border:none;background:#000}
+</style>
+</head>
+<body>
+<div id="t">
+  <div id="tp"><span id="tp-l"></span><span id="tp-r"></span></div>
+  <div class="gb" id="gb">
+    <span class="glb">模型:</span><select class="gsel" id="gsel"></select>
+    <button class="gbtn" onclick="cmd('/model list')">M</button>
+    <button class="gbtn" onclick="cmd('/session list')">S</button>
+    <button class="gbtn p" onclick="cmd('/session new')">+会话</button>
+    <button class="gbtn s" onclick="learnLast()">L学习</button>
+    <button class="gbtn" onclick="cmd('/stats')">*</button>
+    <button class="gbtn" onclick="cmd('/export')">E</button>
+    <button class="gbtn d" onclick="cmd('/reset')">!</button>
+    <button class="gbtn" onclick="CMDS['./gui']('gui')">G GUI</button>
+  </div>
+  <div id="o"></div>
+  <form id="ia"><span class="p" id="ip"></span><input type="text" id="ci" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus enterkeyhint="send" inputmode="text"><button type="submit" id="sb" style="display:none">Enter</button></form>
+</div>
+<div id="skill-overlay">
+  <div id="skill-bar"><span id="skill-name"></span><button id="skill-close" onclick="closeSkill()">X 退出</button></div>
+  <iframe id="skill-frame" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+</div>
+<div id="lg">
+<pre class="lb" id="lg-box"></pre>
+</div>
+<script>
+(function(){
+'use strict';
+
+// ===== Cookie =====
+function ckSet(k,v,d){d=d||30;document.cookie=k+'='+encodeURIComponent(v)+';path=/;max-age='+(d*86400)}
+function ckGet(k){const m=document.cookie.match(new RegExp('(?:^|; )'+k+'=([^;]*)'));return m?decodeURIComponent(m[1]):null}
+function ckDel(k){document.cookie=k+'=;path=/;max-age=0'}
+
+// ===== 布尔解析 =====
+function toBool(s){const v=(s||'').trim().toLowerCase();if(['on','t','1','true','yes','y'].includes(v))return true;if(['off','f','0','false','no','n'].includes(v))return false;return null}
+
+// ===== DOM =====
+const O=document.getElementById('o'),C=document.getElementById('tp-r'),PL=document.getElementById('tp-l'),CI=document.getElementById('ci'),IP=document.getElementById('ip'),GB=document.getElementById('gb'),GS=document.getElementById('gsel');
+
+// ===== State =====
+let sid=null,sids=[],models=[],cmid=null,str=false,ab=null,gid=null,mode='terminal',messages=[];
+let thinkingOn=true,logLevel=2,lastLockedSid=null;
+const AUTO_U='User';
+
+function sleep(m){return new Promise(r=>setTimeout(r,m))}
+function sb(){O.scrollTop=O.scrollHeight}
+function fmt(ts){if(!ts)return'-';const d=new Date(ts);return d.toLocaleTimeString()}
+
+// ===== OS =====
+function ddev(){const u=navigator.userAgent.toLowerCase();const t=navigator.maxTouchPoints||0;if((/iphone|ipod/.test(u)||(/macintosh/i.test(navigator.userAgent))&&t>=2))return'iOS';if(/ipad/.test(u))return'iOS';if(/android/.test(u))return'Android';if(/win/.test(u))return'Windows';if(/mac/.test(u))return'macOS';if(/linux/.test(u))return'Linux';return'Unknown'}
+const DEV=ddev(),USR=ckGet('csim_u')||'user';
+let sysUser='',sysHost='',sysIP='127.0.0.1';
+function getPrompt(){const b=DEV+'@'+(sysUser||USR);if(sid){const s=sids.find(x=>x.id===sid);const nm=s?((s.name||'').replace(/^s_/,'').slice(0,12)):'';return b+':~/'+nm+'$'}return b+':~$'}
+
+// ===== Clock =====
+function tc(){const n=new Date();C.textContent='['+String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0')+']'}
+setInterval(tc,1000);
+
+// ===== Render =====
+const PAL={cyan:'#8be9fd',yellow:'#f1fa8c',red:'#ff5555',green:'#50fa7b',dim:'#6272a4',purple:'#bd93f9',pink:'#ff79c6',white:'#c0c0c0'};
+async function log(op){op=op||{};const t=op.t||'',tx=op.tx||'',co=op.co||'white',sp=op.sp!=null?op.sp:20,dl=op.dl!=null?op.dl:80;await sleep(dl);const l=document.createElement('div');l.className='ll';l.innerHTML='<span class="lt" style="color:'+(PAL[co]||'#c0c0c0')+'">['+t.padEnd(7,' ')+']</span><span class="ltx" style="color:'+(PAL[co]||'#e0e0e0')+'">'+tx+'</span>';O.appendChild(l);sb()}
+function prUser(text){const l=document.createElement('div');l.className='ul';l.innerHTML='<span class="p" style="color:#50fa7b;font-weight:700;flex-shrink:0">'+getPrompt()+'</span><span class="t" style="color:#e0e0e0"></span>';O.appendChild(l);const tg=l.querySelector('.t');tg.textContent=text;sb()}
+
+// ===== 打字机 =====
+function mkThink(){const b=document.createElement('div');b.className='tb';b.innerHTML='<span class="tl">[T]</span> <span class="tx"></span>';O.appendChild(b);sb();const s=b.querySelector('.tx');let buf='',idx=0;function tick(){if(idx<buf.length){s.textContent=buf.substring(0,++idx);sb();requestAnimationFrame(tick)}}return{append(c){buf+=c;tick()}}}
+
+function mkReply(){const b=document.createElement('div');b.className='rb';O.appendChild(b);sb();let buf='',idx=0,curMsgId=null;function tick(){if(idx<buf.length){b.textContent=buf.substring(0,++idx);sb();requestAnimationFrame(tick)}}
+return{setId(id){curMsgId=id},append(c){buf+=c;tick()},rm(){const c=b.querySelector('.tc');if(c)c.remove()},done(){if(curMsgId){const d=document.createElement('div');d.className='ul';d.style.margin='1px 0 0 0';d.innerHTML='<span style="color:#3a4a5a;font-size:10px">msg_id='+curMsgId+'</span>';O.appendChild(d);sb()}}}}
+
+// ===== API =====
+async function af(p,o){o=o||{};o.credentials='include';o.headers=o.headers||o.hd||{};o.headers['Content-Type']='application/json';o.headers['X-App-Source']='terminal';if(o.bd&&typeof o.bd==='object'){o.body=JSON.stringify(o.bd)}delete o.bd;delete o.hd;const r=await fetch(p,o);return r.ok?r.json():Promise.reject({status:r.status,message:(await r.json().catch(()=>({}))).error||'HTTP '+r.status})}
+async function ldS(){try{sids=await af('/api/sessions')}catch(e){sids=[]}}
+async function ldM(){try{models=await af('/api/models')}catch(e){models=[]}}
+async function ldH(){if(!sid){messages=[];return}try{messages=await af('/api/history/'+sid)}catch(e){messages=[]}}
+function rfSel(){GS.innerHTML='';for(const m of(models||[])){const o=document.createElement('option');o.value=m.id;o.textContent=(m.name||m.id)+' ['+(m.weight_count||0)+']';if(m.id===cmid)o.selected=true;GS.appendChild(o)}}
+
+// ===== Mode =====
+function setMode(m){mode=m;if(m==='gui')GB.classList.add('on');else GB.classList.remove('on');ckSet('csim_mode',m,30)}
+
+// ===== Skill overlay =====
+const SKILL_IFRAME=document.getElementById('skill-frame'),SKILL_OVERLAY=document.getElementById('skill-overlay'),SKILL_NAME=document.getElementById('skill-name');
+async function loadSkill(name){try{const r=await fetch('/api/skills/'+encodeURIComponent(name),{credentials:'include',headers:{'X-App-Source':'terminal'}});if(!r.ok)throw new Error('skill not found');const j=await r.json();SKILL_NAME.textContent=(j.meta&&j.meta.description?'* '+j.meta.description:'* '+name);SKILL_IFRAME.srcdoc=j.html;SKILL_OVERLAY.classList.add('on')}catch(e){await log({t:'ERR',tx:'skill 加载失败: '+e.message,co:'red',dl:0})}}
+async function openHTML(name){const n=(name||'').replace(/\.html$/,'');try{const r=await fetch('/api/pages/'+encodeURIComponent(n),{credentials:'include',headers:{'X-App-Source':'terminal'}});if(!r.ok)throw new Error('html not found');const t=await r.text();SKILL_NAME.textContent='* '+n;SKILL_IFRAME.srcdoc=t;SKILL_OVERLAY.classList.add('on')}catch(e){await log({t:'ERR',tx:'html 加载失败: '+e.message,co:'red',dl:0})}}
+function closeSkill(){SKILL_OVERLAY.classList.remove('on');SKILL_IFRAME.srcdoc='';SKILL_NAME.textContent=''}
+
+// ===== SSE Chat =====
+async function send(text){
+  if(str)return;
+  if(!sid){await log({t:'ERR',tx:'未绑定会话。session new [n] 或 bind <id>',co:'red',dl:0});return}
+  const xs=sids.find(x=>x.id===sid);
+  if(xs&&xs.locked&&xs.locked_by!==sysUser){await log({t:'LOCKED',tx:'会话 '+sid+' 已被 '+xs.locked_by+' 锁定',co:'yellow',dl:0});return}
+  str=true;let tk=null,rk=null,phaseDone=false,curMsgId=null;
+  ab=new AbortController();
+  await prUser(text);
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,sessionId:sid}),credentials:'include',signal:ab.signal});
+    if(!r.ok){
+      if(r.status===403){const j=await r.json().catch(()=>({}));await log({t:'LOCKED',tx:'会话已被锁定 ('+(j.locked_by||'unknown')+') — 等待解锁',co:'yellow',dl:0});str=false;ab=null;gid=null;return}
+      throw new Error('HTTP '+r.status)
+    }
+    const rd=r.body.getReader(),dc=new TextDecoder();let buf='',ce=null;
+    while(true){const{done,value}=await rd.read();if(done)break;buf+=dc.decode(value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
+      for(const ln of ls){
+        if(ln.startsWith('event:'))ce=ln.substring(6).trim();
+        else if(ln.startsWith('data:')){const d=ln.substring(5);
+          if(ce==='start'){try{const j=JSON.parse(d);gid=j.genId;curMsgId=j.userMsgId||j.userId||null}catch(e){}ce=null}
+          else if(ce==='thinking_start'){if(thinkingOn)tk=mkThink();ce=null}
+          else if(ce==='thinking_token'){if(thinkingOn&&tk)tk.append(d);ce=null}
+          else if(ce==='thinking_done'){if(tk){tk=null;await sleep(200)}phaseDone=true;ce=null}
+          else if(ce==='reply_start'){rk=mkReply();if(curMsgId)rk.setId(curMsgId);ce=null}
+          else if(ce==='done'){if(rk){rk.rm();rk.done()}ce=null}
+          else if(ce==='error'){if(rk){rk.rm();rk=null}const e=document.createElement('div');e.style.color='#ff5555';e.textContent='ERR '+d;ce=null}
+          else{if(phaseDone||!tk){if(!rk){rk=mkReply();if(curMsgId)rk.setId(curMsgId)}rk.append(d)}}
+        }
+      }
+    }
+    if(rk){rk.rm();rk.done()}
+  }catch(e){const m=(e&&e.message||String(e));if(!m.toLowerCase().includes('abort')&&!m.toLowerCase().includes('failed to fetch'))(()=>{const l=document.createElement('div');l.style.color='#ff5555';l.textContent='ERR '+m;O.appendChild(l)})();}
+  str=false;ab=null;gid=null;lastLockedSid=sid;ckSet('csim_sid',String(sid),30);await ldH()
+}
+async function stop_(){if(gid){try{if(ab)ab.abort();await fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({genId:gid}),credentials:'include'}).catch(()=>{})}catch(e){};gid=null;str=false}}
+
+// ===== Commands =====
+const CMDS={
+  // ---- Help ----
+  async help(a){const cmd=(a||'').trim();const DEFS={help:{d:'显示帮助，help <cmd> 查看详细用法',u:'help [command]',e:'help\nhelp session list\nhelp account add'},session:{d:'管理会话：列表、创建、切换、删除',u:'session [list | new [name] | switch <id> | del <id>]',e:'session list\nsession new mychat\nsession switch 3\nsession del 3'},'session list':{d:'列出所有会话，显示 ID、名称、消息数、更新时间',u:'session list',e:'session list'},'session new':{d:'新建一个会话并自动绑定',u:'session new [name]',e:'session new\nsession new myproject'},'session switch':{d:'切换到指定 ID 的会话（自动绑定）',u:'session switch <id>',e:'session switch 3'},'session del':{d:'删除指定 ID 的会话',u:'session del <id>',e:'session del 3'},model:{d:'管理N-gram模型：列出、切换、训练',u:'model [list | switch <id> | train <输入> → <输出>]',e:'model list\nmodel switch 1\nmodel train 你好 → 您好'},'model list':{d:'列出所有可用模型及词表大小',u:'model list',e:'model list'},'model switch':{d:'切换当前会话使用的模型',u:'model switch <id>',e:'model switch 1'},'model train':{d:'训练模型：输入 → 输出（reply×4 think×3）',u:'model train <输入> → <输出>',e:'model train 你好 → 您好 → 请问有什么可以帮您？'},bind:{d:'绑定一个会话为当前工作会话',u:'bind <sessionId>',e:'bind 1'},send:{d:'向当前绑定会话发送消息（可带前缀 / 或直接输文本）',u:'send <文本>\n或直接输文本',e:'send 你好\n你好'},exit:{d:'离开当前会话，返回主页（不清除会话数据）',u:'/exit',e:'/exit'},whoami:{d:'显示当前用户、设备类型、主机名、IP',u:'whoami',e:'whoami'},version:{d:'显示版本、运行时、数据库、作者信息',u:'version',e:'version'},ping:{d:'测试后端连通性，返回往返延迟（毫秒）',u:'ping',e:'ping'},clear:{d:'清空终端输出区（别名：cls）',u:'clear | cls',e:'clear'},'./gui':{d:'无参：跳转到 /chat.html 网页UI\n有参：在终端内嵌入加载 ./<file>.html',u:'./gui\n./gui <filename>',e:'./gui\n./gui dashboard'},skill:{d:'通过 skill 系统加载并显示 HTML 界面',u:'/skill <skill_name>',e:'/skill calculator'},'log-level':{d:'设置日志详细度 0-3（0=仅错误，3=调试）',u:'log-level <0-3>',e:'log-level 2'},stop:{d:'中止当前正在生成的流式响应',u:'/stop',e:'/stop'},thinking:{d:'开关 thinking block 显示（on/off）',u:'/thinking on | /thinking off',e:'/thinking on\n/thinking off'},'/thinking on':{d:'开启 thinking block 显示',u:'/thinking on',e:'/thinking on'},'/thinking off':{d:'关闭 thinking block 显示',u:'/thinking off',e:'/thinking off'},info:{d:'显示当前会话 ID、名称、模型、消息数、设备信息',u:'/info',e:'/info'},stats:{d:'显示当前模型的 weight_count、entries、配置',u:'/stats',e:'/stats'},export:{d:'下载当前模型权重为 JSON 文件',u:'/export',e:'/export'},last:{d:'显示最后一条 assistant 消息的 msgId',u:'/last',e:'/last'},edit:{d:'修改指定消息的内容（需知道 msgId）',u:'/edit <msgId> <新文本>',e:'/edit 42 你好世界'},regen:{d:'重新生成指定消息（默认重新生成最后一条）',u:'/regen [msgId]',e:'/regen\n/regen 42'},retry:{d:'regen 的别名',u:'/retry [msgId]',e:'/retry'},del:{d:'删除指定消息（需知道 msgId）',u:'/del <msgId>',e:'/del 42'},undo:{d:'删除最后一条消息并刷新列表',u:'/undo',e:'/undo'},copy:{d:'复制最后一条 assistant 回复到剪贴板',u:'/copy',e:'/copy'},save:{d:'保存当前会话名称（即重命名）',u:'/save <name>',e:'/save myproject'},changepwd:{d:'修改密码（admin可改他人，其他人只能改自己）',u:'changepwd <旧密码> <新密码> <确认密码> [用户名]',e:'changepwd old123 new123 new123\nchangepwd old123 new123 new123 admin'},account:{d:'账号管理（仅 admin）：list / add / del / lock / unlock',u:'account [list | add <name> <pwd> <pwd> [role] | del <name> T/F | lock <name> | unlock <name>]',e:'account list\naccount add alice password123 password123 trainer\naccount del alice T'},'account list':{d:'列出所有账号及其角色和锁定状态',u:'account list',e:'account list'},'account add':{d:'新建账号（需两次密码一致）',u:'account add <name> <pwd> <pwd> [admin|trainer]',e:'account add alice password123 password123\naccount add bob password123 password123 admin'},'account del':{d:'删除账号（需确认）',u:'account del <name> T/F',e:'account del alice T'},'account lock':{d:'锁定账号（使其无法登录）',u:'account lock <name>',e:'account lock alice'},'account unlock':{d:'解锁已锁定的账号',u:'account unlock <name>',e:'account unlock alice'},quit:{d:'退出登录，清除 session cookie 并刷新页面',u:'quit',e:'quit'},unlock:{d:'admin 解锁指定会话（解除他人锁定）',u:'/unlock <sessionId>',e:'/unlock 3'},'change-mode gui':{d:'切换到 GUI 网页模式',u:'/change-mode gui',e:'/change-mode gui'},'change-mode terminal':{d:'切换到终端模式',u:'/change-mode terminal',e:'/change-mode terminal'}};
+  if(cmd){const parts=cmd.split(/\s+/);const d=DEFS[cmd]||DEFS[parts[0]];if(!d)return await log({t:'ERR',tx:'help: 未知命令 '+parts[0],co:'red',dl:0});
+    await log({t:'HELP',tx:cmd,co:'cyan',dl:0});
+    if(d.d){const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#6272a4">  '+d.d+'</span>';O.appendChild(l);sb()}
+    if(d.u){const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#6272a4">  用法: </span><span style="color:#f1fa8c">'+d.u+'</span>';O.appendChild(l);sb()}
+    if(d.e){const ls=d.e.split('\n');for(const ex of ls){const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#6272a4">  示例: </span><span style="color:#e0e0e0">'+ex+'</span>';O.appendChild(l);sb()}}
+    return}
+  const inS=!!sid,isAdmin=sysRole==='admin';const mk=(c,d)=>{const l=document.createElement('div');l.className='ll';const a2=document.createElement('span');a2.style.flexShrink='0';a2.style.color='#f1fa8c';a2.textContent=c.padEnd(24,' ');const b=document.createElement('span');b.style.color='#6272a4';b.textContent=d;l.appendChild(a2);l.appendChild(b);O.appendChild(l);sb()};
+  if(!inS){mk('help','显示帮助，help <cmd> 查看用法');mk('session list','列出所有会话');mk('session new [name]','新建并绑定会话');mk('session switch <id>','切换到指定会话');mk('session del <id>','删除指定会话');mk('model list','列出所有模型');mk('model switch <id>','切换当前模型');mk('model train i → o','训练 reply×4 think×3');mk('bind <id>','绑定会话为当前工作会话');mk('whoami','查看 user / device / ip');mk('version','版本 & 运行环境信息');mk('ping','后端连通性测试');mk('clear | cls','清空终端输出');mk('./gui','跳转网页 UI 或嵌入 ./<file>.html');mk('/skill <name>','加载 skill HTML 面板');mk('log-level 0-3','设置日志详细度');mk('changepwd','修改密码');if(isAdmin){mk('account list','列出所有账号');mk('account add name pwd pwd','新建账号（可选 admin/trainer）');mk('account del name T/F','删除账号');mk('account lock <name>','锁定账号');mk('account unlock <name>','解锁账号')}mk('quit','退出登录并刷新')}
+  else{mk('/help','显示帮助');mk('/exit','离开会话返回主页');mk('/bind <id>','切换绑定会话');mk('/session list','列出所有会话');mk('/session new [name]','新建会话');mk('/session switch <id>','切换会话');mk('/session del <id>','删除会话');mk('/model list','列出所有模型');mk('/model switch <id>','切换当前模型');mk('/model train i → o','训练 reply×4 think×3');mk('/send <文本>','发送消息');mk('/thinking on|off','开关 thinking block');mk('/last','最后一轮 assistant msgId');mk('/edit <id> <文本>','修改消息内容');mk('/regen [msgId]','重新生成消息');mk('/retry [msgId]','regen 别名');mk('/del <msgId>','删除指定消息');mk('/undo','撤销最后一条');mk('/copy','复制最后回复到剪贴板');mk('/save <name>','保存/重命名会话');mk('/info','会话 & 模型详情');mk('/stats','模型权重统计');mk('/export','导出模型 JSON');mk('/stop','中止当前生成');mk('./gui','跳转网页 UI 或嵌入 ./<file>.html');mk('/skill <name>','加载 skill HTML 面板');if(isAdmin){mk('/unlock <id>','(admin) 解锁指定会话')}mk('/quit','退出登录')}
+  for(let i=0;i<25;i++)await sleep(4)},
+
+  // ---- Session ----
+  async session(a){const[s,...r]=a.split(' ');if(!s||s==='list'){for(const x of sids){const cur=x.id===sid?' <':'';const msgs=x.msg_count||0;const lk=x.locked?' [LOCKED]':(x.locked_by?' >':'');const lktxt=x.locked_by?' [锁:'+x.locked_by+']':'';const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#bd93f9;flex-shrink:0">['+x.id+']</span> <span style="color:#e0e0e0">'+(x.name||'(unnamed)')+cur+' — '+msgs+'条 · '+fmt(x.updated_at)+lktxt+lk+'</span>';O.appendChild(l);sb();await sleep(12)}return}
+    if(s==='new'){const n=r.join(' ')||'s_'+Date.now().toString().slice(-6);try{const x=await af('/api/sessions',{method:'POST',bd:{name:n,type:'chat',model_id:cmid||undefined}});await ldS();sid=x.id;await ldH();if(cmid)rfSel();IP.textContent=getPrompt();PL.textContent=getPrompt();await log({t:'OK',tx:'['+x.id+'] 已创建并绑定',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    if(s==='switch'){const id=parseInt(r[0]);if(!id)return await log({t:'ERR',tx:'用法 session switch <id>',co:'red',dl:0});const x=sids.find(y=>y.id===id);if(!x)return await log({t:'ERR',tx:'会话 '+id+' 不存在',co:'red',dl:0});sid=id;await ldH();if(x.model_id){cmid=x.model_id;rfSel()}IP.textContent=getPrompt();PL.textContent=getPrompt();await log({t:'OK',tx:'已绑定 ['+x.id+']',co:'green',dl:0});return}
+    if(s==='del'){const id=parseInt(r[0]);try{await af('/api/sessions/'+id,{method:'DELETE'});await ldS();if(sid===id){sid=sids.length?sids[0].id:null;IP.textContent=getPrompt();PL.textContent=getPrompt()}await log({t:'OK',tx:'会话 '+id+' 已删',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    await log({t:'ERR',tx:'未知子命令 '+s,co:'red',dl:0})},
+
+  // ---- Model ----
+  async model(a){const[s,...r]=a.split(' ');if(!s||s==='list'){for(const m of models){const cur=m.id===cmid?' <':'';const wc=m.weight_count||0;const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#bd93f9;flex-shrink:0">['+m.id+']</span> <span style="color:#e0e0e0">'+(m.name||'')+' — '+wc+cur+'</span>';O.appendChild(l);sb();await sleep(12)}return}
+    if(s==='switch'){const id=r[0];const m=models.find(x=>x.id===id);if(!m)return await log({t:'ERR',tx:'模型不存在: '+id,co:'red',dl:0});cmid=id;if(sid){try{await af('/api/sessions/'+sid,{method:'PATCH',bd:{model_id:id}})}catch(e){}}rfSel();await log({t:'OK',tx:'已切换 ['+id+']',co:'green',dl:0});return}
+    if(s==='train'){const raw=r.join(' ');const ps=raw.split(/\s*→\s*|\s*->\s*|\s*=>\s*/);if(ps.length!==2)return await log({t:'ERR',tx:'model train <输入> → <输出>',co:'red',dl:0});const inp=ps[0].trim(),out=ps[1].trim();if(!cmid)cmid=models.length?models[0].id:null;if(!cmid)return await log({t:'ERR',tx:'无模型',co:'red',dl:0});await log({t:'..',tx:'训练 ['+cmid+']',co:'yellow',dl:0});try{const pairs=Array(4).fill({input:inp,output:out});await af('/api/models/'+cmid+'/train-batch',{method:'POST',bd:{pairs}});const tp=Array(3).fill({input:'think|'+inp,output:'策略: '+out.slice(0,20)});await af('/api/models/'+cmid+'/train-batch',{method:'POST',bd:{pairs:tp}});await ldM();rfSel();await log({t:'OK',tx:'训练 +4r +3t',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    await log({t:'ERR',tx:'未知子命令 '+s,co:'red',dl:0})},
+
+  // ---- Session mgmt ----
+  async bind(a){const id=parseInt((a||'').trim());if(!id)return await log({t:'ERR',tx:'用法 bind <sessionId>',co:'red',dl:0});const x=sids.find(y=>y.id===id);if(!x)return await log({t:'ERR',tx:'会话 '+id+' 不存在',co:'red',dl:0});if(x.locked&&x.locked_by!==sysUser){await log({t:'LOCKED',tx:'会话 '+id+' 已被 '+x.locked_by+' 锁定，无法绑定',co:'yellow',dl:0});return}sid=id;await ldH();if(x.model_id){cmid=x.model_id;rfSel()}IP.textContent=getPrompt();PL.textContent=getPrompt();await log({t:'OK',tx:'已绑定 ['+x.id+'] '+(x.name||'')+(x.locked?' [已锁定]':''),co:'green',dl:0})},
+  async exit(){if(!sid)return await log({t:'..',tx:'已在主页',co:'dim',dl:0});try{await fetch('/api/sessions/'+sid+'/unlock',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include'})}catch(e){};sid=null;messages=[];lastLockedSid=null;ckDel('csim_sid');IP.textContent=getPrompt();PL.textContent=getPrompt();await log({t:'OK',tx:'已离开会话',co:'green',dl:0})},
+  async unlock(a){if(sysRole!=='admin')return await log({t:'ERR',tx:'Permission denied: admin only',co:'red',dl:0});const id=parseInt((a||'').trim());if(!id)return await log({t:'ERR',tx:'用法 unlock <sessionId>',co:'red',dl:0});try{await fetch('/api/sessions/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:id}),credentials:'include'});await ldS();await log({t:'OK',tx:'会话 '+id+' 已解锁',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async './gui'(a){const n=(a||'').trim().toLowerCase();if(n==='gui'||n===''){try{const r=await fetch('/api/pages/chat',{credentials:'include',headers:{'X-App-Source':'terminal'}});if(!r.ok)throw new Error('page not found');const html=await r.text();SKILL_NAME.textContent='* chat';SKILL_IFRAME.srcdoc=html;SKILL_OVERLAY.classList.add('on');return}catch(e){await log({t:'ERR',tx:'无法加载 chat 页面: '+e.message,co:'red',dl:0});return}}await openHTML(n)},
+  async skill(a){const name=(a||'').trim().toLowerCase();if(!name)return await log({t:'ERR',tx:'用法 /skill <name>',co:'red',dl:0});await loadSkill(name)},
+  async send(a){if(!sid)return await log({t:'ERR',tx:'先 bind 会话',co:'red',dl:0});const m=(a||'').trim();if(!m)return;await send(m)},
+
+  // ---- Message ops ----
+  async last(){await ldH();const last=messages.filter(m=>m.role==='assistant').slice(-1)[0];if(!last)return await log({t:'ERR',tx:'无 assistant 消息',co:'red',dl:0});await log({t:'OK',tx:'msg_id='+last.id,co:'cyan',dl:0})},
+  async edit(a){const ps=a.trim().split(/\s+/);if(ps.length<2)return await log({t:'ERR',tx:'用法 edit <id> <新文本>',co:'red',dl:0});const id=parseInt(ps[0]);const newText=ps.slice(1).join(' ');if(!id)return;try{await af('/api/history/message/'+id,{method:'PATCH',bd:{content:newText}});await log({t:'OK',tx:'msg '+id+' 已更新',co:'green',dl:0});await ldH()}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async regen(a){const id=parseInt((a||'').trim());const targetId=id||messages.filter(m=>m.role==='assistant').slice(-1)[0]?.id;if(!targetId)return await log({t:'ERR',tx:'无目标。regen <msgId>',co:'red',dl:0});try{await log({t:'..',tx:'重新生成 msg '+targetId,co:'yellow',dl:0});await af('/api/history/message/'+targetId,{method:'DELETE'});await af('/api/chat/regenerate',{method:'POST',bd:{sessionId:sid}});await ldH();await log({t:'OK',tx:'已重新生成',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async retry(a){await CMDS.regen(a)},
+  async del(a){const id=parseInt((a||'').trim());if(!id)return await log({t:'ERR',tx:'用法 del <msgId>',co:'red',dl:0});try{await af('/api/history/message/'+id,{method:'DELETE'});await log({t:'OK',tx:'msg '+id+' 已删',co:'green',dl:0});await ldH()}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async undo(){await ldH();const last=messages.slice(-1)[0];if(!last)return await log({t:'ERR',tx:'无消息可撤销',co:'red',dl:0});try{await af('/api/history/message/'+last.id,{method:'DELETE'});await log({t:'OK',tx:'已撤销 msg '+last.id,co:'green',dl:0});await ldH()}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async copy(){await ldH();const last=messages.filter(m=>m.role==='assistant').slice(-1)[0];if(!last)return await log({t:'ERR',tx:'无 assistant 消息',co:'red',dl:0});try{await navigator.clipboard.writeText(last.content);await log({t:'OK',tx:'已复制 ('+last.content.length+' chars)',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async save(a){const name=(a||'').trim();if(!name)return await log({t:'ERR',tx:'用法 save <模板名>',co:'red',dl:0});try{await af('/api/sessions/'+sid,{method:'PATCH',bd:{name:name}});await ldS();await log({t:'OK',tx:'已保存模板: '+name,co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async thinking(a){const v=toBool((a||'').trim());if(v===null)return await log({t:'ERR',tx:'thinking on|off',co:'red',dl:0});thinkingOn=v;await log({t:'OK',tx:'思考块: '+(v?'显示':'隐藏'),co:'green',dl:0})},
+  async stop(){if(str){await stop_();await log({t:'WARN',tx:'已中止',co:'yellow',dl:0})}else await log({t:'..',tx:'无生成中',co:'dim',dl:0})},
+
+  // ---- 信息/工具 ----
+  async stats(){const mid=cmid||(models.length?models[0].id:null);if(!mid)return await log({t:'ERR',tx:'无模型',co:'red',dl:0});try{const m=await af('/api/models/'+mid);const wc=m.weight_list_by_layer||{};const cf=m.config||{};await log({t:'OK',tx:m.name||mid,co:'cyan',dl:0});await log({t:'  ',tx:'total='+(m.weight_count||0)+' entries='+(m.weight_total_count||0),co:'white',dl:0,sp:6});if(cf.temperature!=null)await log({t:'  ',tx:'temp='+cf.temperature+' ngram='+cf.ngramSize,co:'dim',dl:0,sp:6})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+  async export(){const mid=cmid||(models.length?models[0].id:null);if(!mid)return;window.location.href='/api/models/'+mid+'/export'},
+  async info(){await ldH();const s=sids.find(x=>x.id===sid);if(!s)return await log({t:'ERR',tx:'无会话',co:'red',dl:0});const m=models.find(x=>x.id===(s.model_id||cmid));await log({t:'OK',tx:'['+s.id+'] '+(s.name||'(unnamed)'),co:'cyan',dl:0});await log({t:'  ',tx:'model='+(m?.id||'无')+' ['+(m?.name||'')+']',co:'white',dl:0,sp:6});await log({t:'  ',tx:'msgs='+messages.length+' uid='+sysUser+' dev='+DEV+' ip='+sysIP,co:'dim',dl:0,sp:6})},
+  async whoami(){await log({t:'OK',tx:'user='+sysUser+' device='+DEV+' host='+sysHost+' ip='+sysIP,co:'cyan',dl:0})},
+  async version(){await ldH();const mid=cmid||(models.length?models[0].id:null);const mc=models.find(x=>x.id===mid);const wc=mc?.weight_count||0;const totalS=sids.length;const totalM=messages.length;await log({t:'  ',tx:'',co:'white',dl:0});await log({t:'[-]',tx:'chat-sim',co:'cyan',dl:0});await log({t:'  |',tx:'  v1.0.0-alpha  (unreleased)',co:'cyan',dl:0,sp:4});await log({t:'  |',tx:'  model:    N-gram',co:'white',dl:0,sp:4});await log({t:'  |',tx:'  backend:  node/express',co:'white',dl:0,sp:4});await log({t:'  |',tx:'  db:       sql.js (SQLite WASM)',co:'white',dl:0,sp:4});await log({t:'  +',tx:'  session:  '+totalS+' active  |  model:'+mid+' ['+(mc?.name||'')+'] wc='+wc,co:'yellow',dl:0,sp:4});await log({t:'  +',tx:'  user:     '+sysUser+' ['+sysRole+']',co:'yellow',dl:0,sp:4});await log({t:'  +',tx:'  os/host:  '+DEV+' @ '+sysHost+' ('+sysIP+')',co:'yellow',dl:0,sp:4});await log({t:'  ]',tx:'  author:   uGmTEAM  ->  github.com/uGmTEAM',co:'purple',dl:0,sp:4});await log({t:'  ',tx:'',co:'white',dl:0});await log({t:'  ',tx:'  Made with Artificial Intelligence',co:'dim',dl:0,sp:4})},
+  async ping(){const t0=Date.now();try{await af('/api/health');await log({t:'OK',tx:'pong '+(Date.now()-t0)+'ms',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+
+  // ---- 管理 ----
+  async 'change-mode'(a){const t=(a||'').trim().toLowerCase();if(t==='gui'){setMode('gui');await log({t:'OK',tx:'→ GUI',co:'green',dl:0})}else if(t==='terminal'){setMode('terminal');await log({t:'OK',tx:'→ terminal',co:'green',dl:0})}else await log({t:'ERR',tx:'change-mode t|g ('+mode+')',co:'red',dl:0})},
+  async clear(){O.innerHTML='';await log({t:'OK',tx:'screen cleared',co:'green',dl:0})},
+  async cls(){await CMDS.clear()},
+  async 'log-level'(a){const v=parseInt((a||'').trim());if(isNaN(v)||v<0||v>3)return await log({t:'ERR',tx:'log-level 0-3',co:'red',dl:0});logLevel=v;await log({t:'OK',tx:'log-level='+v,co:'green',dl:0})},
+  async quit(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'})}catch(e){}ckDel('csim_u');location.reload()},
+  // ---- account (admin only) ----
+  async account(a){const[s,...r]=(a||'').split(' ');
+    if(sysRole!=='admin')return await log({t:'ERR',tx:'Permission denied: admin only',co:'red',dl:0});
+    if(!s||s==='list'){try{const x=await af('/api/auth/accounts');for(const acc of x.accounts){const lk=acc.locked?' [LOCKED]':'';const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#bd93f9;flex-shrink:0">['+acc.username+']</span> <span style="color:#e0e0e0">'+acc.role+'</span> <span style="color:#ff5555">'+lk+'</span>';O.appendChild(l);sb();await sleep(12)}}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    if(s==='add'){const[un,pw,cf,ro]=r;if(!un||!pw||!cf)return await log({t:'ERR',tx:'account add name pwd pwd [admin|trainer]',co:'red',dl:0});const role=ro||'trainer';try{const x=await af('/api/auth/accounts/add',{method:'POST',bd:{username:un,password:pw,confirm:cf,role}});await log({t:'OK',tx:x.msg,co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    if(s==='del'){const[un,cf]=r;if(!un)return await log({t:'ERR',tx:'account del name T/F',co:'red',dl:0});const cb=toBool(cf);if(cb===null)return await log({t:'ERR',tx:'confirm must be T/F/1/0',co:'red',dl:0});try{const x=await af('/api/auth/accounts/del',{method:'POST',bd:{username:un,confirm:cf}});await log({t:'OK',tx:x.msg,co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    if(s==='lock'){const[un]=r;if(!un)return await log({t:'ERR',tx:'account lock name',co:'red',dl:0});try{const x=await af('/api/auth/accounts/lock',{method:'POST',bd:{username:un}});await log({t:'OK',tx:x.msg,co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    if(s==='unlock'){const[un]=r;if(!un)return await log({t:'ERR',tx:'account unlock name',co:'red',dl:0});try{const x=await af('/api/auth/accounts/unlock',{method:'POST',bd:{username:un}});await log({t:'OK',tx:x.msg,co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}return}
+    await log({t:'ERR',tx:'account subcommand: list|add|del|lock|unlock',co:'red',dl:0})},
+  async changepwd(a){const ps=(a||'').trim().split(/\s+/);if(ps.length<4)return await log({t:'ERR',tx:'changepwd oldpwd newpwd newpwd [username]',co:'red',dl:0});const[oldpwd,newpwd,confirm,target]=ps;try{const r=await af('/api/auth/changepwd',{method:'POST',bd:{oldpwd,newpwd,confirm,username:target}});await log({t:'OK',tx:r.msg||'Password changed',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}},
+};
+
+async function learnLast(){if(!sid)return await log({t:'ERR',tx:'先选会话',co:'red',dl:0});try{const h=await af('/api/history/'+sid);let u=null,b=null;for(let i=h.length-1;i>=0;i--){if(!b&&h[i].role==='assistant')b=h[i];else if(b&&h[i].role==='user'){u=h[i];break}}if(!u||!b)return await log({t:'ERR',tx:'找不到完整一轮',co:'red',dl:0});const p=Array(4).fill({input:u.content,output:b.content});const tp=b.thinking&&b.thinking.trim()?Array(3).fill({input:'think|'+u.content,output:b.thinking.trim()}):[];await af('/api/models/'+cmid+'/train-batch',{method:'POST',bd:{pairs:p}});if(tp.length)await af('/api/models/'+cmid+'/train-batch',{method:'POST',bd:{pairs:tp}});await ldM();rfSel();await log({t:'OK',tx:'训练 +'+(4+tp.length)+'组',co:'green',dl:0})}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}}
+window.learnLast=learnLast;
+window.cmd=async function(r){CI.value=r;await handle()};
+
+// ===== 白名单 =====
+const MAIN_CMDS=['help','session','bind','quit','whoami','version','ping','clear','cls','./gui','change-mode','log-level','changepwd','account'];
+const SESSION_CMDS=['help','exit','bind','session','model','send','stats','export','info','last','edit','regen','retry','del','undo','copy','save','thinking','stop','whoami','version','ping','clear','./gui','skill','change-mode','log-level','changepwd','quit','account','unlock'];
+
+async function handle(){const r=CI.value.trim();if(!r)return;CI.value='';let isCmd=false,c='',a='';
+if(!sid){
+  const[p,...rest]=r.split(' ');c=p;a=rest.join(' ');
+  if(p.startsWith('/')){await log({t:'ERR',tx:'主页不用 / 前缀  (help)',co:'red',dl:0});return}
+  if(!MAIN_CMDS.includes(c)){await log({t:'ERR',tx:'未知命令: '+c+'  (help)',co:'red',dl:0});return}
+  isCmd=true;await prUser(r)
+}else{
+  const raw=r.startsWith('/')?r.substring(1):r;
+  const[p,...rest]=raw.split(' ');
+  if(SESSION_CMDS.includes(p)){isCmd=true;await ldH();c=p;a=rest.join(' ');await prUser(r)}
+}
+if(isCmd){const f=CMDS[c];if(f){try{await f(a)}catch(e){await log({t:'ERR',tx:e.message,co:'red',dl:0})}}}
+else{let msg=r;if(msg.startsWith('send '))msg=msg.substring(5);if(!msg.trim())return;await send(msg)}}
+
+// ===== Login =====
+let sysRole='';
+function showLogin(preserveU){
+  const lg=document.getElementById('lg');const box=document.getElementById('lg-box');box.innerHTML='';
+  box.innerHTML='<div style="color:#8be9fd;display:block;margin:2px 0">chat-sim login:</div><div style="display:block;margin:2px 0">User name: <input type="text" id="lg-u" autofocus style="background:transparent;border:none;outline:none;color:#e0e0e0;font-family:inherit;font-size:inherit;caret-color:#8be9fd;width:220px;padding:0;margin:0"></div><div id="lg-p-line" style="display:none;margin:2px 0">Password: <input type="password" id="lg-p" style="background:transparent;border:none;outline:none;color:#e0e0e0;font-family:inherit;font-size:inherit;caret-color:#8be9fd;width:220px;padding:0;margin:0"></div>';
+  lg.style.display='flex';
+  const uIn=document.getElementById('lg-u'),pLine=document.getElementById('lg-p-line'),pIn=document.getElementById('lg-p');
+  if(preserveU)uIn.value=preserveU;else{const cu=ckGet('csim_u');if(cu)uIn.value=cu}
+  let curIn=uIn;const lgFocus=function(e){if(!e.target.closest('input'))curIn.focus()};document.addEventListener('click',lgFocus);
+  uIn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(!uIn.value.trim())return;pLine.style.display='block';pIn.focus();curIn=pIn}});
+  pIn.addEventListener('keydown',async e=>{if(e.key==='Enter'){e.preventDefault();const u=uIn.value.trim();const p=pIn.value;if(!u||!p)return;document.removeEventListener('click',lgFocus);try{const r=await af('/api/auth/login',{method:'POST',bd:{username:u,password:p}});ckSet('csim_u',u,30);sysUser=u;sysRole=r.role||'';lg.style.display='none';boot_continue()}catch(err){box.innerHTML='';await sleep(80);box.innerHTML='<div style="color:#ff5555;font-family:inherit">Login failed</div>';await sleep(1200);showLogin(u)}}});
+  uIn.focus();
+}
+
+// ===== Boot =====
+async function boot_continue(){
+  const cu=ckGet('csim_u');
+  if(!cu)return showLogin();
+  try{
+    const me=await af('/api/auth/me');
+    if(!me.ok||me.username!==cu){ckDel('csim_u');return showLogin()}
+    sysUser=me.username;sysRole=me.role||'';
+    lastLockedSid=parseInt(ckGet('csim_sid'))||null;
+    try{
+      O.innerHTML='';
+      const roleTag=sysRole?' <span style="color:#bd93f9">['+sysRole+']</span>':'';
+      const okLine=document.createElement('div');okLine.className='ll';okLine.innerHTML='<span class="lt" style="color:#50fa7b">[ OK ]</span><span class="ltx" style="color:#e0e0e0"> Welcome, '+sysUser+'! Authentication successful.'+roleTag+'</span>';O.appendChild(okLine);sb();
+      const lastLine=document.createElement('div');lastLine.className='ll';lastLine.innerHTML='<span class="lt" style="color:#6272a4">[- ]</span><span class="ltx" style="color:#6272a4"> Last login: '+new Date().toUTCString()+' from '+sysHost+' ('+sysIP+')</span>';O.appendChild(lastLine);sb();await sleep(350);
+      setMode(ckGet('csim_mode')||'terminal');
+      await ldS();await ldM();if(models.length)cmid=models[0].id;await ldH();
+      if(lastLockedSid&&sids.find(x=>x.id===lastLockedSid)){sid=lastLockedSid;IP.textContent=getPrompt();PL.textContent=getPrompt();await log({t:'OK',tx:'已恢复上次会话 ['+sid+']',co:'cyan',dl:0})}
+      GS.addEventListener('change',()=>CMDS.model('switch '+GS.value));
+      function submit(){if(CI.value.trim())handle()}
+      CI.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}});
+      CI.addEventListener('keypress',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}});
+      document.getElementById('ia').addEventListener('submit',e=>{e.preventDefault();submit()});
+      document.getElementById('sb').addEventListener('click',e=>{e.preventDefault();submit()});
+      PL.textContent=getPrompt();
+      await log({t:'..',tx:'chat-sim initialized  —  type help',co:'dim',dl:0,sp:4});
+      CI.focus()
+    }catch(e2){showLogin()}
+  }catch(e){showLogin()}
+}
+
+async function boot(){
+  try{const hi=await fetch('/api/health').then(r=>r.json());if(hi.sysinfo){sysHost=hi.sysinfo.hostname||'';sysIP=hi.sysinfo.ip||'127.0.0.1'}}catch(e){}
+  closeSkill();
+  try{await boot_continue()}catch(e){showLogin()}
+}
+
+document.addEventListener('click',e=>{if(!e.target.closest('input'))CI.focus()});
+boot();
+})();
+</script>
+
+</body>
+</html>
