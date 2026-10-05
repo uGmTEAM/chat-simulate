@@ -102,6 +102,20 @@ function unlockAccount(actor, username) {
   return { ok: true, msg: 'Account '+username+' unlocked' };
 }
 
+function renameAccount(actor, oldUsername, newUsername) {
+  const users = loadUsers();
+  if (!users[oldUsername]) return { ok: false, code: 404, msg: 'Old account not found' };
+  if (users[newUsername]) return { ok: false, code: 409, msg: 'New username already taken' };
+  if (!newUsername || !newUsername.trim()) return { ok: false, code: 400, msg: 'New username required' };
+  const oldData = users[oldUsername];
+  delete users[oldUsername];
+  users[newUsername] = oldData;
+  saveUsers(users);
+  // 登出旧用户名所有 session
+  for (const [t, s] of SESSIONS) { if (s.username === oldUsername) SESSIONS.delete(t); }
+  return { ok: true, msg: 'Account renamed: '+oldUsername+' → '+newUsername };
+}
+
 function listAccounts() {
   const users = loadUsers();
   return Object.keys(users).map(n => ({
@@ -143,6 +157,6 @@ function ensureDefaults() {
 
 module.exports = {
   verifyUsername, login, getUserByToken, logout,
-  addAccount, delAccount, lockAccount, unlockAccount, listAccounts,
+  addAccount, delAccount, lockAccount, unlockAccount, renameAccount, listAccounts,
   changePassword, ensureDefaults,
 };

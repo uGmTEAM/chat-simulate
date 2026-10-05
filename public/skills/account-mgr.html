@@ -89,7 +89,8 @@ async function refresh(){
       const lockBtn=a.locked
         ?`<button class="success" style="padding:2px 8px;font-size:11px" onclick="unlockAccount('${esc(a.username)}')">解锁</button>`
         :`<button class="secondary" style="padding:2px 8px;font-size:11px" onclick="lockAccount('${esc(a.username)}')">锁定</button>`;
-      return `<tr><td style="font-weight:bold;color:#e0e0e0">${esc(a.username)}</td><td>${roleTag}</td><td>${lockTag}</td><td style="color:#5a6a8a;font-size:11px">${time}</td><td>${lockBtn} ${canDel}</td></tr>`;
+      const renameBtn=`<button class="secondary" style="padding:2px 8px;font-size:11px" onclick="renameAccount('${esc(a.username)}')">改名</button>`;
+      return `<tr><td style="font-weight:bold;color:#e0e0e0">${esc(a.username)}</td><td>${roleTag}</td><td>${lockTag}</td><td style="color:#5a6a8a;font-size:11px">${time}</td><td>${lockBtn} ${renameBtn} ${canDel}</td></tr>`;
     }).join('');
   }catch(e){MSG.style.color='#ff5555';MSG.textContent='加载失败: '+e.message}
 }
@@ -127,6 +128,15 @@ async function delAccount(u){
   if(!confirm('确定删除账号 "'+u+'"？此操作不可撤销。'))return;
   try{
     const j=await api('/api/auth/accounts/del',{method:'POST',bd:{username:u,confirm:true}});
+    showMsg(j.msg,'green');refresh();
+  }catch(e){showMsg(e.message,'red')}
+}
+
+async function renameAccount(u){
+  const newName=prompt('请输入新用户名：','');
+  if(!newName||!newName.trim())return;
+  try{
+    const j=await api('/api/auth/accounts/rename',{method:'POST',bd:{username:u,newUsername:newName.trim()}});
     showMsg(j.msg,'green');refresh();
   }catch(e){showMsg(e.message,'red')}
 }

@@ -130,4 +130,12 @@ router.post('/accounts/unlock', requireRole('admin'), (req, res) => {
   res.json({ ok: true, msg: r.msg });
 });
 
+router.post('/accounts/rename', requireRole('admin'), (req, res) => {
+  const { username, newUsername } = req.body || {};
+  if (!username || !newUsername) return res.status(400).json({ error: 'username, newUsername required' });
+  const r = auth.renameAccount(req.user.username, username.trim(), newUsername.trim());
+  if (!r.ok) return res.status(r.code).json({ error: r.msg });
+  res.json({ ok: true, msg: r.msg });
+});
+
 module.exports = { router, requireAuth };
