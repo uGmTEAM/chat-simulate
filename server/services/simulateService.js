@@ -403,7 +403,11 @@ async function* streamGenerateWithContext(userInput, history, shouldStop, modelD
     if (nextToken.length > 6 && layerWeights.sentence > layerWeights.char) break;
     if (/[。！？!?]/.test(nextToken) && generated.length > 8 && i > 5) break;
   }
-  yield { type: 'done', thinking: thinkingText, reply: cleanReply(replyText) };
+  let finalReply = cleanReply(replyText);
+  if (!finalReply || finalReply.trim().length < 2) {
+    finalReply = handleFallback(userInput);
+  }
+  yield { type: 'done', thinking: thinkingText, reply: finalReply };
 }
 
 // ===== 7. 自动记忆训练 =====
