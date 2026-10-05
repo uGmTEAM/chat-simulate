@@ -197,7 +197,7 @@ const CMDS={
     if(d.e){const ls=d.e.split('\n');for(const ex of ls){const l=document.createElement('div');l.className='ll';l.innerHTML='<span style="color:#6272a4">  示例: </span><span style="color:#e0e0e0">'+ex+'</span>';O.appendChild(l);sb()}}
     return}
   const inS=!!sid,isAdmin=sysRole==='admin';const mk=(c,d)=>{const l=document.createElement('div');l.className='ll';const a2=document.createElement('span');a2.style.flexShrink='0';a2.style.color='#f1fa8c';a2.textContent=c.padEnd(24,' ');const b=document.createElement('span');b.style.color='#6272a4';b.textContent=d;l.appendChild(a2);l.appendChild(b);O.appendChild(l);sb()};
-  if(!inS){mk('help','显示帮助，help <cmd> 查看用法');mk('session','管理会话：list / new / switch / del');mk('model','管理模型：list / switch / train');mk('bind <id>','绑定会话为当前工作会话');mk('whoami','查看 user / device / ip');mk('version','版本 & 运行环境信息');mk('ping','后端连通性测试');mk('clear | cls','清空终端输出');mk('./gui','跳转网页 UI 或嵌入 ./<file>.html');mk('/skill <name>','加载 skill HTML 面板');mk('log-level 0-3','设置日志详细度');mk('changepwd','修改密码');if(isAdmin){mk('account','账号管理：list / add / del / lock / unlock')}mk('quit','退出登录并刷新')}
+  if(!inS){mk('help','显示帮助，help <cmd> 查看用法');mk('session','管理会话：list / new / switch / del');mk('model','管理模型：list / switch / train');mk('bind <id>','绑定会话为当前工作会话');mk('whoami','查看 user / device / ip');mk('version','版本 & 运行环境信息');mk('ping','后端连通性测试');mk('clear | cls','清空终端输出');mk('./gui','跳转网页 UI 或嵌入 ./<file>.html');mk('/skill <name>','加载 skill HTML 面板');mk('log-level 0-3','设置日志详细度');mk('changepwd','修改密码');if(isAdmin){mk('account','账号管理：list / add / del / lock / unlock');mk('unlock <id>','(admin) 强制解锁指定会话')}mk('quit','退出登录并刷新')}
   else{mk('/help','显示帮助');mk('/exit','离开会话返回主页');mk('/bind <id>','切换绑定会话');mk('/session list','列出所有会话');mk('/session new [name]','新建会话');mk('/session switch <id>','切换会话');mk('/session del <id>','删除会话');mk('/model list','列出所有模型');mk('/model switch <id>','切换当前模型');mk('/model train i → o','训练 reply×4 think×3');mk('/send <文本>','发送消息');mk('/thinking on|off','开关 thinking block');mk('/last','最后一轮 assistant msgId');mk('/edit <id> <文本>','修改消息内容');mk('/regen [msgId]','重新生成消息');mk('/retry [msgId]','regen 别名');mk('/del <msgId>','删除指定消息');mk('/undo','撤销最后一条');mk('/copy','复制最后回复到剪贴板');mk('/save <name>','保存/重命名会话');mk('/info','会话 & 模型详情');mk('/stats','模型权重统计');mk('/export','导出模型 JSON');mk('/stop','中止当前生成');mk('./gui','跳转网页 UI 或嵌入 ./<file>.html');mk('/skill <name>','加载 skill HTML 面板');if(isAdmin){mk('/unlock <id>','(admin) 解锁指定会话')}mk('/quit','退出登录')}
   for(let i=0;i<25;i++)await sleep(4)},
 
@@ -266,7 +266,7 @@ window.learnLast=learnLast;
 window.cmd=async function(r){CI.value=r;await handle()};
 
 // ===== 白名单 =====
-const MAIN_CMDS=['help','session','bind','quit','whoami','version','ping','clear','cls','./gui','change-mode','log-level','changepwd','account'];
+const MAIN_CMDS=['help','session','bind','quit','whoami','version','ping','clear','cls','./gui','change-mode','log-level','changepwd','account','unlock'];
 const SESSION_CMDS=['help','exit','bind','session','model','send','stats','export','info','last','edit','regen','retry','del','undo','copy','save','thinking','stop','whoami','version','ping','clear','./gui','skill','change-mode','log-level','changepwd','quit','account','unlock'];
 
 async function handle(){const r=CI.value.trim();if(!r)return;CI.value='';let isCmd=false,c='',a='';
