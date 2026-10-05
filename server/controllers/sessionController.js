@@ -42,6 +42,9 @@ router.get('/', (req, res) => {
 // body: { name, type: 'chat'|'train', model_id }
 router.post('/', (req, res) => {
   try {
+    if (req.user && req.user.role === 'trainer') {
+      return res.status(403).json({ error: 'Trainer cannot create sessions' });
+    }
     const type = req.body?.type || 'chat';
     const name = req.body?.name || `${type === 'train' ? '训练' : '聊天'}会话 ${new Date().toLocaleString()}`;
     const modelId = req.body?.model_id || 'default';
