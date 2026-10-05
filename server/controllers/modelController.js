@@ -3,6 +3,7 @@
 const express = require('express');
 const modelService = require('../services/modelService');
 const ngram = require('../utils/ngram');
+const fs = require('fs');
 const path = require('path');
 
 const router = express.Router();
@@ -94,6 +95,17 @@ router.post('/:id/train-batch', (req, res) => {
       total += ngram.trainFromPair(p.input, p.output, { modelDir: dir });
     }
     res.json({ success: true, pairs: pairs.length, totalWeightChanges: total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/models/:id/stats - 模型统计信息（含 Transformer）
+router.get('/:id/stats', (req, res) => {
+  try {
+    const dir = modelService.modelDir(req.params.id);
+    if (!fs.existsSync(dir)) return res.status(404).json({ error: '模型不存在' });
+    res.json(modelService.modelStats(dir));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

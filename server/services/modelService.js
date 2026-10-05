@@ -360,7 +360,14 @@ function modelStats(modelDirPath) {
   for (const w of weights) byLayer[w.layer] = (byLayer[w.layer] || 0) + 1;
   const tfPath = path.join(modelDirPath, 'transformer.json');
   const hasTransformer = fs.existsSync(tfPath);
-  return { total: weights.length, byLayer, hasTransformer, tfParams: hasTransformer ? '~500k' : 0 };
+  let tfParams = 0;
+  if (hasTransformer) {
+    try {
+      const t = loadTransformer(modelDirPath);
+      tfParams = t ? t.paramCount() : 163200;
+    } catch (e) { tfParams = 163200; }
+  }
+  return { total: weights.length, byLayer, hasTransformer, tfParams };
 }
 
 // ============ 导出 ============

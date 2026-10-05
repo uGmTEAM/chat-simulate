@@ -41,7 +41,7 @@ function getRecentHistory(sessionId, limit = 10) {
 
 // POST /api/chat - 发送消息
 router.post('/', async (req, res) => {
-  const { message, sessionId, stream: wantStream = true } = req.body || {};
+  const { message, sessionId, stream: wantStream = true, thinking: wantThinking = true } = req.body || {};
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'message 不能为空' });
   }
@@ -113,13 +113,13 @@ router.post('/', async (req, res) => {
 
       if (chunk.type === 'stop') break;
       if (chunk.type === 'thinking_start') {
-        sse.send('thinking_start', '');
+        if (wantThinking) sse.send('thinking_start', '');
       } else if (chunk.type === 'thinking_token') {
         thinking += chunk.text;
-        sse.send('thinking_token', chunk.text);
+        if (wantThinking) sse.send('thinking_token', chunk.text);
       } else if (chunk.type === 'thinking_done') {
         thinking = chunk.text;
-        sse.send('thinking_done', '');
+        if (wantThinking) sse.send('thinking_done', '');
       } else if (chunk.type === 'reply_start') {
         sse.send('reply_start', '');
       } else if (chunk.type === 'token') {
