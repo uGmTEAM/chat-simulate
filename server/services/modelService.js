@@ -71,6 +71,11 @@ function createModel(name, description = '', baseConfig = {}) {
   fs.writeFileSync(modelMetaPath(dir), JSON.stringify(meta, null, 2), 'utf8');
   fs.writeFileSync(modelWeightsPath(dir), JSON.stringify(weights, null, 2), 'utf8');
 
+  // 初始化 Transformer 模型
+  const { Transformer } = require('../utils/transformer');
+  const tf = new Transformer(3000);
+  tf.save(dir);
+
   return { id, ...meta, config };
 }
 
@@ -189,7 +194,7 @@ function copyModel(sourceModelId, targetDir) {
   ensureDir(targetDir);
 
   // 复制三个文件
-  for (const fname of ['config.json', 'token_weights.json', 'meta.json']) {
+  for (const fname of ['config.json', 'token_weights.json', 'meta.json', 'transformer.json']) {
     const src = path.join(srcDir, fname);
     const dst = path.join(targetDir, fname);
     if (fs.existsSync(src)) {
@@ -353,7 +358,9 @@ function modelStats(modelDirPath) {
   const weights = readWeights(modelDirPath);
   const byLayer = { char: 0, word: 0, sentence: 0 };
   for (const w of weights) byLayer[w.layer] = (byLayer[w.layer] || 0) + 1;
-  return { total: weights.length, byLayer };
+  const tfPath = path.join(modelDirPath, 'transformer.json');
+  const hasTransformer = fs.existsSync(tfPath);
+  return { total: weights.length, byLayer, hasTransformer, tfParams: hasTransformer ? '~500k' : 0 };
 }
 
 // ============ 导出 ============
@@ -388,6 +395,19 @@ function exportModel(modelId, exportPath) {
   };
   fs.writeFileSync(exportPath, JSON.stringify(bundle, null, 2), 'utf8');
   return exportPath;
+}
+
+// ============ Transformer 辅助 ============
+function initTransformer(modelDirPath) {
+  const { Transformer } = require('../utils/transformer');
+  const t = new Transformer(3000);
+  t.save(modelDirPath);
+  return t;
+}
+
+function loadTransformer(modelDirPath) {
+  const { Transformer } = require('../utils/transformer');
+  try { return Transformer.load(modelDirPath); } catch(e) { return null; }
 }
 
 // ============ 初始化：启动时确保有一个默认模型 ============
@@ -427,4 +447,6 @@ module.exports = {
   migrateFromSqliteDb, ensureDefaultModel,
   // 工具
   modelStats, exportModel,
+  // Transformer
+  initTransformer, loadTransformer,
 };

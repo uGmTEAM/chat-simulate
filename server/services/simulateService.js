@@ -12,10 +12,61 @@
 
 const ngram = require('../utils/ngram');
 const tokenizer = require('../utils/tokenizer');
+const { Transformer } = require('../utils/transformer');
 const trainService = require('./trainService');
 const db = require('../models/db');
 const config = require('../config');
 const logger = require('../middlewares/logger');
+const fs = require('fs');
+const path = require('path');
+
+// ===== Transformer 辅助函数 =====
+function loadTransformer(modelDir) {
+  try {
+    const t = Transformer.load(modelDir);
+    if (t) return t;
+  } catch(e) {}
+  return null;
+}
+
+function initTransformer(modelDir) {
+  try {
+    if (fs.existsSync(path.join(modelDir, 'transformer.json'))) return loadTransformer(modelDir);
+  } catch(e) {}
+  const t = new Transformer(3000);
+  t.save(modelDir);
+  return t;
+}
+
+function transformTrainPair(input, output, modelDir) {
+  try {
+    const t = initTransformer(modelDir);
+    const loss = t.trainStep(input, output, 0.002);
+    t.save(modelDir);
+    return loss;
+  } catch(e) {
+    logger.warn('Transformer训练失败: ' + e.message);
+    return null;
+  }
+}
+
+function generateThinkingFromTransformer(userInput, modelDir) {
+  try {
+    const t = loadTransformer(modelDir);
+    if (!t) return '';
+    const ctx = `think|${userInput}`;
+    const result = t.generate(ctx, 50, '。！？!?');
+    return result || '';
+  } catch(e) { return ''; }
+}
+
+function generateReplyFromTransformer(contextStr, modelDir, maxTokens = 80) {
+  try {
+    const t = loadTransformer(modelDir);
+    if (!t) return null;
+    return t.generate(contextStr, maxTokens, '。！？!?');
+  } catch(e) { return null; }
+}
 
 // ===== 1. 记忆提取 =====
 function extractFacts(history) {
@@ -194,9 +245,22 @@ function pickNextToken(contextualInput, modelDir) {
 function generateWithContext(userInput, history, shouldStop, modelDir) {
   const facts = extractFacts(history);
   const relevantFacts = findRelevantFacts(facts, userInput);
+
+  // 优先使用 Transformer
+  const t = loadTransformer(modelDir);
+  if (t) {
+    logger.info(`🧠 Transformer 生成: 记忆${relevantFacts.length}条, 上下文${history?.length || 0}条`);
+    const thinking = generateThinkingFromTransformer(userInput, modelDir);
+    const contextualInput = buildContextualInput(userInput, history, relevantFacts);
+    const reply = generateReplyFromTransformer(
+      `[思考]${thinking} ${contextualInput}`, modelDir, config.simulate.maxTokens
+    );
+    return { reply: cleanReply(reply || ''), thinking, facts };
+  }
+
+  // 回退到 ngram
   const thinking = generateThinkingFromNgram(userInput, modelDir);
   const contextualInput = buildContextualInput(userInput, history, relevantFacts);
-
   logger.info(`🧠 生成思考: 记忆${relevantFacts.length}条, 上下文${history?.length || 0}条`);
 
   const maxTokens = config.simulate.maxTokens;
@@ -230,6 +294,30 @@ async function* streamGenerateWithContext(userInput, history, shouldStop, modelD
   const facts = extractFacts(history);
   const relevantFacts = findRelevantFacts(facts, userInput);
   const contextualInput = buildContextualInput(userInput, history, relevantFacts);
+
+  const t = loadTransformer(modelDir);
+  if (t) {
+    logger.info('🧠 Transformer 流式生成: 记忆' + relevantFacts.length + '条');
+    yield { type: 'thinking_start' };
+    const thinkingText = generateThinkingFromTransformer(userInput, modelDir);
+    for (const ch of thinkingText.split('')) {
+      if (shouldStop && shouldStop()) { yield { type: 'stop' }; return; }
+      yield { type: 'thinking_token', text: ch };
+      await new Promise(r => setTimeout(r, 4));
+    }
+    yield { type: 'thinking_done', text: thinkingText };
+    yield { type: 'reply_start' };
+    const replyText = generateReplyFromTransformer(
+      `[思考]${thinkingText} ${contextualInput}`, modelDir, config.simulate.maxTokens
+    ) || '';
+    for (const ch of replyText.split('')) {
+      if (shouldStop && shouldStop()) { yield { type: 'stop' }; return; }
+      yield { type: 'token', text: ch };
+      await new Promise(r => setTimeout(r, 10));
+    }
+    yield { type: 'done', thinking: thinkingText, reply: cleanReply(replyText) };
+    return;
+  }
 
   logger.info('🧠 两阶段生成: 记忆' + relevantFacts.length + '条, 上下文' + (history?.length || 0) + '条');
 
@@ -412,6 +500,10 @@ function autoTrainFromDialogue(history, userInput, aiReply, modelDir) {
       changes += ngram.trainFromPair('我的名字是', `你的名字是${m[1]}`, { modelDir });
     }
 
+    // 同时训练 Transformer
+    const loss = transformTrainPair(userInput, aiReply, modelDir);
+    if (loss !== null) logger.info(`🧠 Transformer 训练 loss: ${loss.toFixed(4)}`);
+
     if (changes > 0) {
       logger.info(`🧠 自动记忆训练: +${changes} 权重`);
     }
@@ -442,4 +534,8 @@ module.exports = {
   extractFacts,
   findRelevantFacts,
   generateThinkingFromNgram,
+  generateThinkingFromTransformer,
+  generateReplyFromTransformer,
+  transformTrainPair,
+  loadTransformer,
 };
