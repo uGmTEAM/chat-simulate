@@ -320,7 +320,7 @@ async function boot_continue(){
       CI.addEventListener('keypress',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}});
       document.getElementById('ia').addEventListener('submit',e=>{e.preventDefault();submit()});
       document.getElementById('sb').addEventListener('click',e=>{e.preventDefault();submit()});
-      PL.textContent=getPrompt();
+      PL.textContent=getPrompt();IP.textContent=getPrompt();
       await log({t:'..',tx:'chat-sim initialized  —  type help',co:'dim',dl:0,sp:4});
       CI.focus()
     }catch(e2){showLogin()}
