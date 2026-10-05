@@ -58,10 +58,12 @@ function copyVec(v) { return new Float64Array(v); }
 // ===== Transformer =====
 class Transformer {
   constructor(vocabSize) {
-    this.vocabSize = vocabSize || 3000;
+    // 先建词表拿实际大小，确保权重矩阵维数一致
+    this._maxVocabSize = vocabSize || 3000;
     this.charToId = {};
     this.idToChar = {};
     this._buildVocab();
+    this.vocabSize = this._actualVocabSize;  // 用实际词表大小！
     const s = 0.02;
     this.W_emb   = randn(this.vocabSize, EMBED_DIM, s);
     this.W_q     = randn(EMBED_DIM, EMBED_DIM, s);
@@ -85,19 +87,19 @@ class Transformer {
     const HAN = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行法学民得经十三之进着等部度家电力里水化高自二理起小物现实加量都两体机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心你明看原又么利比或质气第向道命此变条没结解问意建月公无系军很情最代但坚什居治死己节怎车非吧此您叫美助手客再见次今真错啊哈嗯白呀好呢吗哦啦嗨喂嗯啦咯嘿哇哼呃唉嗳呀嘛哟不没很都要会去来能做说看想知道给用让把被从向对和跟比还又也而但或因为所以如果虽然但是然后而且或者以及可是不过就是还是只有只是应该可以可能必须一定需要能够会要想要得地着了过';
     const punctArr = [
       '，','。','！','？','、','；','：','（','）','《》',
-      '…','—','～','·','？','!',',','.',';',':',
-      '(',')','[',']','{','}','<','>','/','\\','|',' ','.','_','+','-','=','*','%','&','#','@','$'
+      '…','—','～','·','！','?',',','.',';',':',
+      '(',')','[',']','{','}','<','>','/','\\','|',' ','_','+','-','=','*','%','&','#','@','$'
     ];
     const all = new Set([...HAN.split(''), ...punctArr]);
     let idx = 0;
     for (const c of all) {
-      if (c && !(c in this.charToId) && idx < this.vocabSize) {
+      if (c && !(c in this.charToId) && idx < this._maxVocabSize) {
         this.charToId[c] = idx;
         this.idToChar[idx] = c;
         idx++;
       }
     }
-    if (!this.charToId['?']) { this.charToId['?'] = idx; this.idToChar[idx] = HAN[0]; }
+    if (!this.charToId['?']) { this.charToId['?'] = idx; this.idToChar[idx] = HAN[0]; idx++; }
     this._actualVocabSize = idx;
   }
 
