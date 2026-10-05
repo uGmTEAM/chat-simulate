@@ -221,19 +221,6 @@ function generateWithContext(userInput, history, shouldStop, modelDir) {
   }
 
   let reply = generated.join('');
-  if (!reply || reply.trim().length < 2) {
-    if (relevantFacts.length > 0) {
-      const idFact = relevantFacts.find(f => f.type === 'identity' && f.subject === '我');
-      if (idFact && /我是谁|我的名字|我叫什么/.test(userInput)) {
-        reply = `你是${idFact.value}。`;
-      } else {
-        reply = handleFallback(userInput);
-      }
-    } else {
-      reply = handleFallback(userInput);
-    }
-  }
-
   reply = cleanReply(reply);
   return { reply, thinking, facts };
 }
@@ -403,11 +390,7 @@ async function* streamGenerateWithContext(userInput, history, shouldStop, modelD
     if (nextToken.length > 6 && layerWeights.sentence > layerWeights.char) break;
     if (/[。！？!?]/.test(nextToken) && generated.length > 8 && i > 5) break;
   }
-  let finalReply = cleanReply(replyText);
-  if (!finalReply || finalReply.trim().length < 2) {
-    finalReply = handleFallback(userInput);
-  }
-  yield { type: 'done', thinking: thinkingText, reply: finalReply };
+  yield { type: 'done', thinking: thinkingText, reply: cleanReply(replyText) };
 }
 
 // ===== 7. 自动记忆训练 =====
@@ -436,19 +419,6 @@ function autoTrainFromDialogue(history, userInput, aiReply, modelDir) {
   } catch (e) {
     logger.warn('自动训练失败: ' + e.message);
     return 0;
-  }
-}
-
-function handleFallback(userInput) {
-  const mode = config.fallbackStrategy.mode;
-  switch (mode) {
-    case 'error': return '❌ 当前模型无法生成，请先训练或换个话题。';
-    case 'empty': return '';
-    case 'fallback':
-    default: {
-      const msgs = config.fallbackStrategy.fallbackMessages;
-      return msgs[Math.floor(Math.random() * msgs.length)];
-    }
   }
 }
 
