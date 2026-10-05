@@ -202,7 +202,7 @@ function generateWithContext(userInput, history, shouldStop, modelDir) {
   const maxTokens = config.simulate.maxTokens;
   let generated = [];
   let consecutiveFails = 0;
-  let currentCtx = contextualInput;
+  let currentCtx = `[思考]${thinking} ${contextualInput}`;
 
   for (let i = 0; i < maxTokens; i++) {
     if (shouldStop && shouldStop()) break;
@@ -321,7 +321,7 @@ async function* streamGenerateWithContext(userInput, history, shouldStop, modelD
   const maxTokens = config.simulate.maxTokens;
   let generated = [];
   let consecutiveFails = 0;
-  let currentCtx = contextualInput;
+  let currentCtx = `[思考]${thinkingText} ${contextualInput}`;
   let replyText = '';
 
   for (let i = 0; i < maxTokens; i++) {
